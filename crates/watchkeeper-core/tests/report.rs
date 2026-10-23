@@ -132,7 +132,7 @@ fn storage_cookies_and_origins() {
         u: "https://t.tracker.net/x".into(),
         t: "img".into(),
         o: String::new(),
-        c: String::new(),
+        c: "1".into(),
         m: String::new(),
     });
     r.set_cookies(vec![
@@ -160,6 +160,15 @@ fn storage_cookies_and_origins() {
         s.third_party_cookies, 1,
         "cookies of sites not contacted here are not counted"
     );
+    // A site only named in a call that went nowhere does not count.
+    r.add_event(Event::Request {
+        u: "https://unrelated.org/".into(),
+        t: "xhr".into(),
+        o: String::new(),
+        c: String::new(),
+        m: String::new(),
+    });
+    assert_eq!(r.summary().third_party_cookies, 1);
 }
 
 #[test]
@@ -175,7 +184,7 @@ fn a_cookie_flood_cannot_hide_a_tracker() {
         u: "https://t.tracker.net/x".into(),
         t: "img".into(),
         o: String::new(),
-        c: String::new(),
+        c: "1".into(),
         m: String::new(),
     });
     let s = r.summary();
@@ -199,7 +208,7 @@ fn an_address_flood_cannot_hide_a_new_site() {
         u: "https://t.tracker.net/x".into(),
         t: "img".into(),
         o: String::new(),
-        c: String::new(),
+        c: "1".into(),
         m: String::new(),
     });
     for i in 0..60 {

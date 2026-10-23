@@ -457,7 +457,9 @@ impl SiteReport {
             let site = site_of_host(c.domain.trim_start_matches('.'));
             if site == self.site {
                 first_party_cookies += 1;
-            } else if self.other_sites.contains(&site) {
+            } else if self.confirmed_sites.contains(&site) {
+                // Only sites the engine saw contacted: a page cannot make
+                // cookies left by earlier sites count as its own.
                 third_party_cookies += 1;
             }
         }

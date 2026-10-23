@@ -48,7 +48,7 @@ pub struct Cookie {
     pub name: String,
     pub domain: String,
     pub http_only: bool,
-    /// "this site" or "other site" (one this page contacted).
+    /// "this site" or "other site" (one the engine saw this page contact).
     pub belongs_to: String,
 }
 
@@ -85,12 +85,16 @@ pub struct Report {
     pub other_sites: Vec<OtherSite>,
     /// Addresses on the site itself.
     pub own_addresses: Vec<Address>,
+    /// Addresses on sites past the site limit, counted as dropped and not
+    /// listed.
+    pub unlisted_addresses: usize,
     /// Cookies in the session's store for this site and the other sites
-    /// it contacted.
+    /// the engine saw it contact.
     pub cookies: Vec<Cookie>,
-    /// Cookies in the store left by earlier, unrelated sites in the
+    /// Every other cookie in the store, left by earlier sites in the
     /// session: counted, never named, so a report says nothing about
-    /// other sites the person visited.
+    /// other sites the person visited. Naming a site in a call that goes
+    /// nowhere does not bring its cookies into a report.
     pub earlier_cookies: usize,
     pub script_cookies: Vec<Named>,
     pub storage_writes: Vec<StorageWrite>,
@@ -142,13 +146,14 @@ impl Report {
                 site: site.clone(),
             })
             .collect();
+        let unlisted_addresses = by_site.values().map(|v| v.len()).sum();
         let mut cookies = Vec::new();
         let mut earlier_cookies = 0;
         for c in &r.cookies {
             let site = site_of_host(c.domain.trim_start_matches('.'));
             let belongs_to = if site == r.site {
                 "this site"
-            } else if r.other_sites.contains(&site) {
+            } else if r.confirmed_sites.contains(&site) {
                 "other site"
             } else {
                 earlier_cookies += 1;
@@ -172,6 +177,7 @@ impl Report {
             summary: r.summary(),
             other_sites,
             own_addresses: own,
+            unlisted_addresses,
             cookies,
             earlier_cookies,
             script_cookies: r
@@ -288,6 +294,14 @@ impl Report {
                 address(&mut h, a);
             }
             h.push_str("</ul></details>\n");
+        }
+
+        if self.unlisted_addresses > 0 {
+            h.push_str(&format!(
+                "<p class=\"muted\">{} more addresses were on sites past the limit of {} other sites. They are counted above but not listed.</p>\n",
+                self.unlisted_addresses,
+                crate::MAX_SITES
+            ));
         }
 
         h.push_str("<h2>Fingerprinting reads</h2>\n");
@@ -426,7 +440,12 @@ pub fn esc(s: &str) -> String {
             | '\u{200b}'..='\u{200f}'
             | '\u{202a}'..='\u{202e}'
             | '\u{2060}'..='\u{206f}'
-            | '\u{feff}' => out.push('\u{fffd}'),
+            | '\u{061c}'
+            | '\u{180e}'
+            | '\u{2028}'..='\u{2029}'
+            | '\u{feff}'
+            | '\u{fff9}'..='\u{fffb}'
+            | '\u{e0000}'..='\u{e007f}' => out.push('\u{fffd}'),
             c => out.push(c),
         }
     }

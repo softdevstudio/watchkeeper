@@ -133,6 +133,10 @@ fn hostile_names_stay_text() {
         "caf\u{e9} \u{65e5}",
         "ordinary text kept"
     );
+    assert_eq!(
+        esc("a\u{061c}b\u{2066}c\u{180e}d\u{e0041}e"),
+        "a\u{fffd}b\u{fffd}c\u{fffd}d\u{fffd}e"
+    );
 }
 
 #[test]
@@ -180,5 +184,27 @@ fn site_list_matches_the_panel() {
     assert_eq!(r.other_sites.len(), r.summary.third_party_sites.len());
     assert_eq!(r.other_sites.len(), MAX_SITES);
     assert!(r.dropped >= 40);
-    assert!(r.to_html().contains(&format!("<b>{MAX_SITES}</b>")));
+    let html = r.to_html();
+    assert!(html.contains(&format!("<b>{MAX_SITES}</b>")));
+    assert_eq!(r.unlisted_addresses, 40);
+    assert!(html.contains("40 more addresses were on sites past the limit"));
+}
+
+#[test]
+fn naming_a_site_does_not_name_its_cookies() {
+    let mut s = Session::default();
+    // The page names bank.example in a call that never goes out.
+    s.apply(&batch(&[req("https://bank.example/", "xhr", "")]))
+        .unwrap();
+    s.report.set_cookies(vec![StoredCookie {
+        name: "bank_session".into(),
+        domain: ".bank.example".into(),
+        http_only: true,
+    }]);
+    let r = Report::new(&s.report, None, "0.3.0", "linux", 0);
+    assert!(r.cookies.is_empty());
+    assert_eq!(r.earlier_cookies, 1);
+    assert_eq!(r.summary.third_party_cookies, 0);
+    assert!(!r.to_json().contains("bank_session"));
+    assert!(!r.to_html().contains("bank_session"));
 }
