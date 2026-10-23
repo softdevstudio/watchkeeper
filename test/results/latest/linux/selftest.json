@@ -57,7 +57,7 @@
   ],
   "summary": {
     "site": "127.0.0.1",
-    "page_url": "http://127.0.0.1:36985/",
+    "page_url": "http://127.0.0.1:40977/",
     "third_party_sites": [
       "localhost"
     ],
@@ -83,19 +83,19 @@
       "query": ""
     },
     {
-      "path": "/collect",
-      "query": "id=1"
-    },
-    {
-      "path": "/xhr",
-      "query": ""
-    },
-    {
       "path": "/pixel.gif",
       "query": ""
     },
     {
+      "path": "/collect",
+      "query": "id=1"
+    },
+    {
       "path": "/beacon",
+      "query": ""
+    },
+    {
+      "path": "/xhr",
       "query": ""
     },
     {
@@ -126,17 +126,17 @@
     }
   ],
   "detected_requests": [
-    "http://127.0.0.1:36985/ipc?denied=1",
-    "http://localhost:33529/beacon",
-    "http://localhost:33529/collect?id=1",
-    "http://localhost:33529/fp?canvas=1&webgl=1&audio=1&idb=1",
-    "http://localhost:33529/frame-call",
-    "http://localhost:33529/frame.html",
-    "http://localhost:33529/late",
-    "http://localhost:33529/pixel.gif",
-    "http://localhost:33529/style.css",
-    "http://localhost:33529/tracker.js",
-    "http://localhost:33529/xhr"
+    "http://127.0.0.1:40977/ipc?denied=1",
+    "http://localhost:36581/beacon",
+    "http://localhost:36581/collect?id=1",
+    "http://localhost:36581/fp?canvas=1&webgl=1&audio=1&idb=1",
+    "http://localhost:36581/frame-call",
+    "http://localhost:36581/frame.html",
+    "http://localhost:36581/late",
+    "http://localhost:36581/pixel.gif",
+    "http://localhost:36581/style.css",
+    "http://localhost:36581/tracker.js",
+    "http://localhost:36581/xhr"
   ],
   "cookies": [
     {
@@ -155,5 +155,5 @@
       "http_only": false
     }
   ],
-  "seconds": 5.207512873
+  "seconds": 5.408064002
 }
