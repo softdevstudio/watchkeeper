@@ -56,6 +56,8 @@ pub fn requested_dir() -> Option<PathBuf> {
 struct Hit {
     path: String,
     query: String,
+    /// Fetch metadata and referrer, to tell what made the request.
+    how: String,
 }
 
 #[derive(Clone, Copy)]
@@ -124,6 +126,7 @@ fn serve(
     reader.read_line(&mut line)?;
     let target = line.split_whitespace().nth(1).unwrap_or("/").to_string();
     let mut length = 0usize;
+    let mut how = Vec::new();
     loop {
         let mut header = String::new();
         if reader.read_line(&mut header)? == 0 || header == "\r\n" || header == "\n" {
@@ -132,6 +135,18 @@ fn serve(
         let lower = header.to_ascii_lowercase();
         if let Some(v) = lower.strip_prefix("content-length:") {
             length = v.trim().parse().unwrap_or(0).min(1 << 20);
+        }
+        for name in [
+            "sec-fetch-dest",
+            "sec-fetch-mode",
+            "sec-purpose",
+            "purpose",
+            "referer",
+            "upgrade",
+        ] {
+            if let Some(v) = lower.strip_prefix(&format!("{name}:")) {
+                how.push(format!("{name}={}", v.trim()));
+            }
         }
     }
     let mut body = vec![0u8; length];
@@ -147,6 +162,7 @@ fn serve(
             h.push(Hit {
                 path: path.clone(),
                 query,
+                how: how.join(" "),
             });
         }
     }
@@ -596,7 +612,13 @@ fn run_checks(
                 KNOWN_UNSEEN.join(" ")
             )
         } else {
-            format!("missed: {}", missed.join(" "))
+            let detail: Vec<String> = tracker
+                .hits()
+                .iter()
+                .filter(|h| missed.contains(&h.path))
+                .map(|h| format!("{} [{}]", h.path, h.how))
+                .collect();
+            format!("missed: {}", detail.join("; "))
         },
     ));
 
