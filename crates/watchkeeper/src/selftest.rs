@@ -1,13 +1,23 @@
-//! `watchkeeper --selftest [dir]`: runs the real app against two local test
+//! `watchkeeper --selftest [dir]`: runs the real app against local test
 //! sites and checks it end to end, on whichever engine this OS provides.
 //!
-//! A first-party site on 127.0.0.1 serves a page that pulls in a "tracker"
-//! from localhost, a different site. The tracker server logs every request
-//! it receives; that log is the ground truth. The test passes only if every
-//! request the tracker server saw also shows up in Watchkeeper's report,
-//! along with the cookies, storage writes and fingerprinting reads the
-//! tracker made. It also checks that the three webviews tile the window,
-//! before and after a resize, and that the page cannot call app commands.
+//! A first-party site on 127.0.0.1 serves pages that pull in a "tracker"
+//! from localhost, a different site. The test servers log every request
+//! they receive; those logs are the ground truth.
+//!
+//! 1. An ordinary page: every request the tracker server saw must be in
+//!    Watchkeeper's report (except requests made from inside a worker,
+//!    which Watchkeeper says it cannot see), along with the cookies,
+//!    storage writes (including a cross-site frame's), fingerprinting
+//!    reads, WebSockets and the worker start. Wrapped classes must still
+//!    behave like the originals. The layout must tile the window and the
+//!    page must not be able to call app commands.
+//! 2. A hostile page: it looks for the collector and tries to drain it,
+//!    replaces built-in functions the detector could depend on, floods
+//!    cookies and requests, then loads a tracker. The tracker must still be
+//!    seen, nothing may be drained, and the flood must show as dropped.
+//! 3. The Back button: the hostile page replaced history.back; the app's
+//!    Back must still go back without calling it.
 //!
 //! Results go to `<dir>/selftest.json`; the exit code is 0 only if every
 //! check passed.
@@ -21,9 +31,13 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::{AppHandle, LogicalSize, Manager, Url};
 
-use crate::{Shared, PAGE, WINDOW};
+use crate::{history, Shared, PAGE, WINDOW};
 
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(60);
+const OVERALL_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Requests made from inside a worker. Watchkeeper reports the worker
+/// starting, not its traffic; the README says so.
+const KNOWN_UNSEEN: &[&str] = &["/worker-call"];
 
 /// `Some(dir)` when the app was started with `--selftest [dir]`.
 pub fn requested_dir() -> Option<PathBuf> {
@@ -88,6 +102,14 @@ impl Server {
     fn has(&self, path: &str) -> bool {
         self.hits().iter().any(|h| h.path == path)
     }
+
+    fn query(&self, path: &str) -> String {
+        self.hits()
+            .iter()
+            .find(|h| h.path == path)
+            .map(|h| h.query.clone())
+            .unwrap_or_default()
+    }
 }
 
 fn serve(
@@ -119,7 +141,8 @@ fn serve(
         Some((p, q)) => (p.to_string(), q.to_string()),
         None => (target.clone(), String::new()),
     };
-    if path != "/favicon.ico" {
+    // The hostile page's own flood is not part of the ground truth.
+    if path != "/favicon.ico" && !path.starts_with("/flood") {
         if let Ok(mut h) = hits.lock() {
             h.push(Hit {
                 path: path.clone(),
@@ -144,36 +167,61 @@ const GIF: &[u8] = &[
     0xf9, 4, 1, 0, 0, 0, 0, 0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 1, 0, 0x3b,
 ];
 
-fn respond(role: Role, path: &str, other: &str) -> (&'static str, &'static str, String, Vec<u8>) {
+type Response = (&'static str, &'static str, String, Vec<u8>);
+
+fn html(body: String) -> Response {
+    (
+        "200 OK",
+        "text/html; charset=utf-8",
+        String::new(),
+        body.into_bytes(),
+    )
+}
+
+fn respond(role: Role, path: &str, other: &str) -> Response {
     let ok = "200 OK";
     match (role, path) {
-        (Role::Site, "/") => (
-            ok,
-            "text/html; charset=utf-8",
-            "Set-Cookie: wk_session=1; Path=/; HttpOnly\r\n".into(),
-            site_page(other).into_bytes(),
-        ),
+        (Role::Site, "/") => {
+            let (s, k, _, b) = html(site_page(other));
+            (
+                s,
+                k,
+                "Set-Cookie: wk_session=1; Path=/; HttpOnly\r\n".into(),
+                b,
+            )
+        }
+        (Role::Site, "/hostile") => html(hostile_page(other)),
         (Role::Tracker, "/tracker.js") => (
             ok,
             "text/javascript",
             String::new(),
-            tracker_js().into_bytes(),
+            TRACKER_JS.as_bytes().to_vec(),
         ),
-        (Role::Tracker, "/frame.html") => (
+        (Role::Tracker, "/h-tracker.js") => (
             ok,
-            "text/html; charset=utf-8",
+            "text/javascript",
             String::new(),
-            "<!doctype html><title>frame</title><script>fetch('/frame-call',{mode:'no-cors'});</script>"
-                .as_bytes()
-                .to_vec(),
+            HOSTILE_TRACKER_JS.as_bytes().to_vec(),
         ),
-        (Role::Tracker, "/style.css") => (ok, "text/css", String::new(), b"h1{font-size:20px}".to_vec()),
+        (Role::Tracker, "/frame.html") => html(
+            "<!doctype html><title>frame</title><script>\
+             localStorage.tp_direct = '1'; localStorage.setItem('tp_set', '1');\
+             fetch('/frame-call', { mode: 'no-cors' });</script>"
+                .into(),
+        ),
+        (Role::Tracker, "/style.css") => (
+            ok,
+            "text/css",
+            String::new(),
+            b"h1{font-size:20px}".to_vec(),
+        ),
         (Role::Tracker, "/pixel.gif") => (
             ok,
             "image/gif",
             "Set-Cookie: wk_track=1; Path=/\r\n".into(),
             GIF.to_vec(),
         ),
+        (Role::Tracker, "/h-pixel.gif") => (ok, "image/gif", String::new(), GIF.to_vec()),
         (_, "/favicon.ico") => ("404 Not Found", "text/plain", String::new(), Vec::new()),
         _ => ("204 No Content", "text/plain", String::new(), Vec::new()),
     }
@@ -182,7 +230,7 @@ fn respond(role: Role, path: &str, other: &str) -> (&'static str, &'static str, 
 fn site_page(tracker: &str) -> String {
     format!(
         r#"<!doctype html>
-<html><head><meta charset="utf-8"><title>Watchkeeper self-test</title>
+<html><head><meta charset="utf-8"><title>Watchkeeper self-test page</title>
 <link rel="stylesheet" href="{tracker}/style.css"></head>
 <body><h1>Watchkeeper self-test page</h1>
 <p>This page pulls in a tracker from another site.</p>
@@ -193,14 +241,14 @@ fn site_page(tracker: &str) -> String {
     )
 }
 
-fn tracker_js() -> String {
-    // Relative to the script's own origin, worked out at run time.
-    r#"(function () {
+const TRACKER_JS: &str = r#"(function () {
   var T = new URL(document.currentScript.src).origin;
+  var WS = T.replace('http', 'ws');
   new Image().src = T + '/pixel.gif';
   fetch(T + '/collect?id=1', { mode: 'no-cors' });
   var x = new XMLHttpRequest(); x.open('GET', T + '/xhr'); x.send();
   navigator.sendBeacon(T + '/beacon', 'b');
+  try { new WebSocket(WS + '/ws'); } catch (e) { }
   document.cookie = 'wk_js=1; path=/';
   localStorage.setItem('wk_ls', '1');
   sessionStorage.setItem('wk_ss', '1');
@@ -215,17 +263,109 @@ fn tracker_js() -> String {
   var audio = 0;
   try { var A = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (A) { new A(1, 44100, 44100); audio = 1; } } catch (e) { }
   fetch(T + '/fp?canvas=' + canvas + '&webgl=' + webgl + '&audio=' + audio + '&idb=' + idb, { mode: 'no-cors' });
+
+  // Wrapped classes and functions must still behave like the originals.
+  var sub = 0, nonew = 'none', aud = 0;
+  try {
+    class S extends WebSocket { m() { return 7; } }
+    var s = new S(WS + '/ws-sub');
+    sub = (s instanceof S && s instanceof WebSocket && s.m() === 7) ? 1 : 0;
+  } catch (e) { sub = 0; }
+  try { WebSocket(WS + '/ws-nonew'); nonew = 'allowed'; } catch (e) { nonew = 'threw'; }
+  try {
+    var AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    class B extends AC { n() { return 9; } }
+    aud = new B(1, 44100, 44100).n() === 9 ? 1 : 0;
+  } catch (e) { aud = 0; }
+  fetch(T + '/wrap?sub=' + sub + '&nonew=' + nonew + '&aud=' + aud + '&fetchname=' + fetch.name, { mode: 'no-cors' });
+
+  // A worker. Its own request is out of Watchkeeper's sight.
+  try {
+    var blob = new Blob(["fetch('" + T + "/worker-call', { mode: 'no-cors' });"], { type: 'text/javascript' });
+    new Worker(URL.createObjectURL(blob));
+  } catch (e) { }
   setTimeout(function () { fetch(T + '/late', { mode: 'no-cors' }); }, 1500);
 })();
-"#
-    .to_string()
+"#;
+
+fn hostile_page(tracker: &str) -> String {
+    format!(
+        r#"<!doctype html>
+<html><head><meta charset="utf-8"><title>Hostile page</title></head>
+<body><h1>Hostile page</h1>
+<script>
+(function () {{
+  // Look for the collector and try to drain it without the secret.
+  var found = 0, drained = 0;
+  Object.getOwnPropertyNames(window).forEach(function (n) {{
+    if (n.indexOf('__wk_') !== 0) return;
+    found++;
+    var c = window[n];
+    [undefined, '', 'guess', n.slice(5)].forEach(function (s) {{
+      try {{ var r = c && c.d && c.d(s, '', 0); if (r) drained++; }} catch (e) {{ }}
+      try {{ var r2 = c && c.d && c.d(s, 'doc', 999999); if (r2) drained++; }} catch (e) {{ }}
+    }});
+  }});
+  fetch('/h-probe?found=' + found + '&drained=' + drained);
+  var t0 = Date.now();
+
+  // Trap the Back button.
+  history.back = function () {{ new Image().src = '/trap'; }};
+  history.go = function () {{ new Image().src = '/trap'; }};
+
+  // Floods. Real engines write cookies slowly (WebKitGTK takes tens of
+  // milliseconds each once a few hundred exist), so the cookie flood is
+  // small; the address flood is large enough to overflow the buffer.
+  for (var i = 0; i < 300; i++) document.cookie = 'c' + i + '=1';
+  for (var j = 0; j < 8000; j++) {{ var x = new XMLHttpRequest(); x.open('GET', '/flood' + j); }}
+  fetch('/h-flooded?ms=' + (Date.now() - t0));
+
+  // Replace everything the detector might lean on.
+  JSON.stringify = function () {{ return '[]'; }};
+  JSON.parse = function () {{ return []; }};
+  Object.prototype.toJSON = function () {{ return 1; }};
+  window.URL = function () {{ throw new Error('no'); }};
+  Array.prototype.push = function () {{ return 0; }};
+  Object.defineProperty(Array.prototype, '0', {{ set: function () {{ }}, configurable: true }});
+  String.prototype.indexOf = function () {{ return -1; }};
+  String.prototype.slice = function () {{ return ''; }};
+  String.prototype.charCodeAt = function () {{ return 0; }};
+  Reflect.apply = function () {{ }};
+  Reflect.construct = function () {{ return {{}}; }};
+  Object.prototype.apply = function () {{ }};
+  Object.prototype.construct = function () {{ }};
+
+  var s = document.createElement('script');
+  s.src = '{tracker}/h-tracker.js';
+  document.head.appendChild(s);
+}})();
+</script>
+</body></html>"#
+    )
 }
+
+// Loaded by the hostile page after it has broken the built-ins above, so it
+// avoids URL and the replaced String methods itself.
+const HOSTILE_TRACKER_JS: &str = r#"(function () {
+  var T = document.currentScript.src.split('/h-tracker.js')[0];
+  var WS = 'ws' + T.substring(4);
+  new Image().src = T + '/h-pixel.gif';
+  fetch(T + '/h-collect', { mode: 'no-cors' });
+  navigator.sendBeacon(T + '/h-beacon', 'b');
+  try { new WebSocket(WS + '/h-ws'); } catch (e) { }
+  setTimeout(function () { fetch(T + '/h-done', { mode: 'no-cors' }); }, 300);
+})();
+"#;
 
 #[derive(Debug, Serialize)]
 struct Check {
     name: &'static str,
     pass: bool,
     detail: String,
+}
+
+fn check(name: &'static str, pass: bool, detail: String) -> Check {
+    Check { name, pass, detail }
 }
 
 #[derive(Serialize)]
@@ -378,6 +518,33 @@ fn check_layout(app: &AppHandle, name: &'static str) -> Check {
     }
 }
 
+fn report(shared: &Shared) -> watchkeeper_core::SiteReport {
+    shared
+        .session
+        .lock()
+        .map(|s| s.report.clone())
+        .unwrap_or_default()
+}
+
+/// Paths on the tracker host that the report contains.
+fn seen_tracker_paths(r: &watchkeeper_core::SiteReport, tracker: &Server) -> Vec<String> {
+    let host = format!("localhost:{}", tracker.port);
+    let mut paths: Vec<String> = r
+        .requests
+        .keys()
+        .filter_map(|u| Url::parse(u).ok())
+        .filter(|u| format!("{}:{}", u.host_str().unwrap_or(""), u.port().unwrap_or(0)) == host)
+        .map(|u| u.path().to_string())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+fn flag(q: &str, k: &str) -> bool {
+    q.split('&').any(|p| p == k)
+}
+
 fn run_checks(
     app: &AppHandle,
     shared: &Shared,
@@ -389,17 +556,17 @@ fn run_checks(
     let deadline = started + OVERALL_TIMEOUT;
     let mut checks = Vec::new();
 
-    // The page has loaded and the tracker's delayed call has gone out.
+    // ---- 1. An ordinary page ---------------------------------------------
     let loaded = wait_until(deadline, || {
-        tracker.has("/late") && tracker.has("/frame-call")
+        tracker.has("/late") && tracker.has("/frame-call") && tracker.has("/wrap")
     });
-    // Give the collector two more rounds, and the cookie reader one.
-    std::thread::sleep(Duration::from_millis(1600));
-    checks.push(Check {
-        name: "page loaded",
-        pass: loaded,
-        detail: format!("tracker received {} requests", tracker.hits().len()),
-    });
+    // Two more collection rounds, a cookie read and a frame storage sweep.
+    std::thread::sleep(Duration::from_millis(2000));
+    checks.push(check(
+        "page loaded",
+        loaded,
+        format!("tracker received {} requests", tracker.hits().len()),
+    ));
 
     let user_agent = eval_json(app, PAGE, "navigator.userAgent")
         .map(|s| unquote(&s))
@@ -407,143 +574,143 @@ fn run_checks(
 
     checks.push(check_layout(app, "layout at start"));
 
-    let report = shared.report.lock().map(|r| r.clone()).unwrap_or_default();
-    let summary = report.summary();
-    let tracker_host = format!("localhost:{}", tracker.port);
-
-    // Every request the tracker server received was seen by Watchkeeper.
-    let seen_paths: Vec<String> = report
-        .requests
-        .keys()
-        .filter_map(|u| Url::parse(u).ok())
-        .filter(|u| {
-            format!("{}:{}", u.host_str().unwrap_or(""), u.port().unwrap_or(0)) == tracker_host
-        })
-        .map(|u| u.path().to_string())
-        .collect();
+    let r = report(shared);
+    let summary = r.summary();
+    let seen = seen_tracker_paths(&r, tracker);
     let mut missed: Vec<String> = tracker
         .hits()
         .iter()
         .map(|h| h.path.clone())
-        .filter(|p| !seen_paths.contains(p))
+        .filter(|p| !seen.contains(p) && !KNOWN_UNSEEN.contains(&p.as_str()))
         .collect();
     missed.sort();
     missed.dedup();
-    checks.push(Check {
-        name: "every tracker request seen",
-        pass: loaded && missed.is_empty(),
-        detail: if missed.is_empty() {
+    checks.push(check(
+        "every tracker request seen",
+        loaded && missed.is_empty(),
+        if missed.is_empty() {
             format!(
-                "{} distinct tracker URLs seen: {}",
-                seen_paths.len(),
-                seen_paths.join(" ")
+                "{} distinct tracker addresses seen: {}; known out of sight: {}",
+                seen.len(),
+                seen.join(" "),
+                KNOWN_UNSEEN.join(" ")
             )
         } else {
             format!("missed: {}", missed.join(" "))
         },
-    });
+    ));
 
-    checks.push(Check {
-        name: "sites told apart",
-        pass: summary.site == "127.0.0.1" && summary.third_party_sites == vec!["localhost"],
-        detail: format!(
+    checks.push(check(
+        "sites told apart",
+        summary.site == "127.0.0.1" && summary.third_party_sites == vec!["localhost"],
+        format!(
             "site {} contacted {:?}",
             summary.site, summary.third_party_sites
         ),
-    });
+    ));
 
-    let want_cookies = ["wk_page", "wk_js"];
-    let missing: Vec<&str> = want_cookies
-        .iter()
-        .copied()
-        .filter(|c| !report.script_cookies.contains(*c))
-        .collect();
-    checks.push(Check {
-        name: "script cookies seen",
-        pass: missing.is_empty(),
-        detail: format!(
-            "seen {:?}{}",
-            report.script_cookies,
-            if missing.is_empty() {
-                String::new()
-            } else {
-                format!(", missing {missing:?}")
-            }
+    let has = |p: &str| seen.iter().any(|s| s == p);
+    checks.push(check(
+        "WebSockets seen",
+        has("/ws") && has("/ws-sub"),
+        format!(
+            "tracker server saw {:?}; report has /ws {} and /ws-sub {}",
+            tracker
+                .hits()
+                .iter()
+                .filter(|h| h.path.starts_with("/ws"))
+                .map(|h| h.path.clone())
+                .collect::<Vec<_>>(),
+            has("/ws"),
+            has("/ws-sub")
         ),
-    });
+    ));
 
-    let fp_query = tracker
-        .hits()
-        .iter()
-        .find(|h| h.path == "/fp")
-        .map(|h| h.query.clone())
-        .unwrap_or_default();
-    let flag = |k: &str| fp_query.split('&').any(|p| p == format!("{k}=1"));
+    let wrap = tracker.query("/wrap");
+    checks.push(check(
+        "wrapped classes behave like the originals",
+        flag(&wrap, "sub=1")
+            && flag(&wrap, "nonew=threw")
+            && flag(&wrap, "aud=1")
+            && flag(&wrap, "fetchname=fetch"),
+        format!("page reported {wrap:?}"),
+    ));
 
+    let workers = summary.workers;
+    checks.push(check(
+        "worker start seen",
+        workers >= 1,
+        format!("{workers} worker(s) reported"),
+    ));
+
+    let missing: Vec<&str> = ["wk_page", "wk_js"]
+        .into_iter()
+        .filter(|c| !r.has_script_cookie(c))
+        .collect();
+    checks.push(check(
+        "script cookies seen",
+        missing.is_empty(),
+        format!("seen {:?}, missing {missing:?}", r.script_cookies),
+    ));
+
+    let fp_query = tracker.query("/fp");
     let mut want_store = vec![
         ("localStorage", "wk_ls"),
         ("localStorage", "direct_key"),
         ("sessionStorage", "wk_ss"),
+        ("localStorage", "tp_set"),
+        ("localStorage", "tp_direct"),
     ];
-    if flag("idb") {
+    if flag(&fp_query, "idb=1") {
         want_store.push(("indexedDB", "wk_db"));
     }
     let missing: Vec<String> = want_store
         .iter()
-        .filter(|(k, n)| !report.storage.contains(&(k.to_string(), n.to_string())))
+        .filter(|(k, n)| !r.has_storage(k, n))
         .map(|(k, n)| format!("{k}:{n}"))
         .collect();
-    checks.push(Check {
-        name: "storage writes seen",
-        pass: missing.is_empty(),
-        detail: format!(
-            "seen {:?}{}",
-            report.storage,
-            if missing.is_empty() {
-                String::new()
-            } else {
-                format!(", missing {missing:?}")
-            }
+    let frame_site_ok = r
+        .storage
+        .iter()
+        .any(|(s, _, n)| s == "localhost" && n == "tp_direct");
+    checks.push(check(
+        "storage writes seen, with the writing site",
+        missing.is_empty() && frame_site_ok,
+        format!(
+            "seen {:?}, missing {missing:?}; frame write credited to localhost: {frame_site_ok}",
+            r.storage
         ),
-    });
+    ));
 
-    let mut want_fp = Vec::new();
-    for api in ["canvas", "webgl", "audio"] {
-        if flag(api) {
-            want_fp.push(api);
-        }
-    }
+    let want_fp: Vec<&str> = ["canvas", "webgl", "audio"]
+        .into_iter()
+        .filter(|a| flag(&fp_query, &format!("{a}=1")))
+        .collect();
     let missing: Vec<&str> = want_fp
         .iter()
         .copied()
-        .filter(|a| !report.fingerprinting.contains(*a))
+        .filter(|a| !r.fingerprinting.contains(*a))
         .collect();
-    checks.push(Check {
-        name: "fingerprinting reads seen",
-        pass: !fp_query.is_empty() && missing.is_empty(),
-        detail: format!(
-            "tracker reported {fp_query:?}; seen {:?}{}",
-            report.fingerprinting,
-            if missing.is_empty() {
-                String::new()
-            } else {
-                format!(", missing {missing:?}")
-            }
+    checks.push(check(
+        "fingerprinting reads seen",
+        !fp_query.is_empty() && missing.is_empty(),
+        format!(
+            "tracker reported {fp_query:?}; seen {:?}, missing {missing:?}",
+            r.fingerprinting
         ),
-    });
+    ));
 
-    let httponly = report
+    let httponly = r
         .cookies
         .iter()
         .any(|c| c.name == "wk_session" && c.http_only);
-    checks.push(Check {
-        name: "server cookie read from the engine",
-        pass: httponly,
-        detail: format!(
+    checks.push(check(
+        "server cookie read from the engine",
+        httponly,
+        format!(
             "{} cookies in the store: {}",
-            report.cookies.len(),
-            report
-                .cookies
+            r.cookies.len(),
+            r.cookies
                 .iter()
                 .map(|c| format!(
                     "{}@{}{}",
@@ -554,7 +721,7 @@ fn run_checks(
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-    });
+    ));
 
     // The page must not be able to call app commands.
     let probe = format!(
@@ -567,22 +734,17 @@ fn run_checks(
     let answered = wait_until(Instant::now() + Duration::from_secs(10), || {
         site.has("/ipc")
     });
-    let ipc = site
-        .hits()
-        .iter()
-        .find(|h| h.path == "/ipc")
-        .map(|h| h.query.clone())
-        .unwrap_or_default();
-    checks.push(Check {
-        name: "page cannot call app commands",
-        pass: answered && ipc != "allowed=1",
-        detail: match ipc.as_str() {
+    let ipc = site.query("/ipc");
+    checks.push(check(
+        "page cannot call app commands",
+        answered && ipc != "allowed=1",
+        match ipc.as_str() {
             "denied=1" => "IPC bridge present, snapshot command refused".into(),
             "absent=1" => "no IPC bridge in the page".into(),
             "allowed=1" => "the page called the snapshot command".into(),
             _ => "probe did not answer".into(),
         },
-    });
+    ));
 
     // Resize the window and check the layout follows.
     if let Some(w) = app.get_window(WINDOW) {
@@ -591,19 +753,105 @@ fn run_checks(
     std::thread::sleep(Duration::from_millis(1500));
     checks.push(check_layout(app, "layout after resize"));
 
+    // ---- 2. A hostile page ---------------------------------------------------
+    let dropped_before = report(shared).dropped;
+    if let Some(v) = app.get_webview(PAGE) {
+        let _ = v.navigate(Url::parse(&format!("{site_url}/hostile")).expect("valid"));
+    }
+    let done = wait_until(Instant::now() + Duration::from_secs(40), || {
+        tracker.has("/h-done")
+    });
+    std::thread::sleep(Duration::from_millis(2500));
+    let r = report(shared);
+    let seen = seen_tracker_paths(&r, tracker);
+    let want = [
+        "/h-tracker.js",
+        "/h-pixel.gif",
+        "/h-collect",
+        "/h-beacon",
+        "/h-ws",
+    ];
+    let missing: Vec<&str> = want
+        .into_iter()
+        .filter(|p| !seen.iter().any(|s| s == p))
+        .collect();
+    checks.push(check(
+        "hostile page cannot blind the detector",
+        done && missing.is_empty(),
+        if missing.is_empty() {
+            format!(
+                "after the page replaced built-ins and flooded, still seen: {}",
+                want.join(" ")
+            )
+        } else {
+            format!(
+                "missed {missing:?}; tracker saw {:?}",
+                tracker
+                    .hits()
+                    .iter()
+                    .map(|h| h.path.clone())
+                    .collect::<Vec<_>>()
+            )
+        },
+    ));
+
+    let probe = site.query("/h-probe");
+    checks.push(check(
+        "hostile page cannot drain the collector",
+        site.has("/h-probe") && flag(&probe, "drained=0"),
+        format!("page reported {probe:?} (found = collectors it could name)"),
+    ));
+
+    let dropped = r.dropped.saturating_sub(dropped_before);
+    checks.push(check(
+        "floods are reported, not hidden",
+        dropped > 0 && r.summary().dropped > 0,
+        format!(
+            "{dropped} events from the flood reported as not counted; {} distinct addresses kept",
+            r.requests.len()
+        ),
+    ));
+
+    // ---- 3. Back ignores the page's history.back -----------------------------
+    let before = shared.address.lock().map(|a| a.clone()).unwrap_or_default();
+    let back = match app.get_webview(PAGE) {
+        Some(v) => history::step(&v, history::Step::Back),
+        None => Err("no page".into()),
+    };
+    let returned = wait_until(Instant::now() + Duration::from_secs(10), || {
+        shared
+            .address
+            .lock()
+            .map(|a| a.trim_end_matches('/') == site_url)
+            .unwrap_or(false)
+    });
+    std::thread::sleep(Duration::from_millis(500));
+    let trapped = site.has("/trap");
+    let after = shared.address.lock().map(|a| a.clone()).unwrap_or_default();
+    checks.push(check(
+        "Back cannot be trapped by the page",
+        back.is_ok() && returned && !trapped,
+        format!(
+            "from {before} back to {after}; page's history.back called: {trapped}{}",
+            back.err()
+                .map(|e| format!("; error {e}"))
+                .unwrap_or_default()
+        ),
+    ));
+
     let passed = checks.iter().all(|c| c.pass);
-    let report = shared.report.lock().map(|r| r.clone()).unwrap_or_default();
+    let r = report(shared);
     Outcome {
         os: std::env::consts::OS,
         arch: std::env::consts::ARCH,
         user_agent,
         passed,
         checks,
-        summary: report.summary(),
+        summary: r.summary(),
         tracker_hits: tracker.hits(),
         site_hits: site.hits(),
-        detected_requests: report.requests.keys().cloned().collect(),
-        cookies: report.cookies.clone(),
+        detected_requests: r.requests.keys().cloned().collect(),
+        cookies: r.cookies.clone(),
         seconds: started.elapsed().as_secs_f64(),
     }
 }

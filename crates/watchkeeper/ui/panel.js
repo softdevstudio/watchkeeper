@@ -18,12 +18,20 @@
       li.textContent = name;
       ul.appendChild(li);
     });
-    set('requests', s.requests);
-    set('third-requests', s.third_party_requests);
+    set('addresses', s.addresses);
+    set('third-addresses', s.third_party_addresses);
     set('first-cookies', s.first_party_cookies);
     set('third-cookies', s.third_party_cookies);
     set('storage', s.storage_writes);
+    set('third-storage', s.third_party_storage_writes);
     set('fp', s.fingerprinting.length ? s.fingerprinting.join(', ') : 'none');
+    set('workers', s.workers);
+    var d = document.getElementById('dropped');
+    d.hidden = !s.dropped;
+    if (s.dropped) {
+      d.textContent = 'This page did ' + s.dropped + ' more things than Watchkeeper could count. ' +
+        'Pages sometimes flood like this to hide what they do; the sites listed above are still complete.';
+    }
   }
 
   setInterval(function () {

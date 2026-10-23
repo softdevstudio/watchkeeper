@@ -9,20 +9,23 @@
   <div class="panel">
     <h1>Watching</h1>
     <div class="site" id="site">No page yet</div>
-    <p class="note" id="hint">Type a web address above. This panel then lists everything the site does behind your back.</p>
+    <p class="note" id="hint">Type a web address above. This panel then lists what the site does behind your back.</p>
 
     <div class="big" id="sites">0</div>
     <div class="label">other sites told about your visit</div>
     <ul id="site-list"></ul>
 
-    <div class="row"><span>Requests</span><span id="requests">0</span></div>
-    <div class="row"><span>Requests to other sites</span><span id="third-requests">0</span></div>
-    <div class="row"><span>Cookies from this site</span><span id="first-cookies">0</span></div>
-    <div class="row"><span>Cookies from those other sites</span><span id="third-cookies">0</span></div>
+    <div class="row"><span>Addresses requested</span><span id="addresses">0</span></div>
+    <div class="row"><span>on other sites</span><span id="third-addresses">0</span></div>
+    <div class="row"><span>Cookies for this site</span><span id="first-cookies">0</span></div>
+    <div class="row"><span>Cookies for those other sites</span><span id="third-cookies">0</span></div>
     <div class="row"><span>Storage writes</span><span id="storage">0</span></div>
+    <div class="row"><span>by frames from other sites</span><span id="third-storage">0</span></div>
     <div class="row"><span>Fingerprinting reads</span><span id="fp">none</span></div>
+    <div class="row"><span>Workers started</span><span id="workers">0</span></div>
 
-    <p class="note">Cookies are counted for this browsing session, which starts empty and is deleted when Watchkeeper closes.</p>
+    <p class="note warn" id="dropped" hidden></p>
+    <p class="note">This session started empty and is deleted when Watchkeeper closes. Cookies for other sites may include ones they set on earlier pages in this session.</p>
   </div>
   <script src="panel.js"></script>
 </body>

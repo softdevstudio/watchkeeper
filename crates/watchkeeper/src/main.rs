@@ -9,6 +9,7 @@
 //! a background thread collects its events and the engine's cookie list.
 //! The page webview has no access to any app command.
 
+mod history;
 #[cfg(target_os = "linux")]
 mod linux_layout;
 mod selftest;
@@ -21,7 +22,7 @@ use tauri::window::WindowBuilder;
 #[cfg(not(target_os = "linux"))]
 use tauri::WindowEvent;
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Url, WebviewUrl};
-use watchkeeper_core::{detection_script, drain_script, SiteReport, StoredCookie, Summary};
+use watchkeeper_core::{detection_script, drain_script, Keys, Session, StoredCookie, Summary};
 
 pub const WINDOW: &str = "main";
 pub const TOOLBAR: &str = "toolbar";
@@ -38,13 +39,30 @@ const COOKIES_EVERY: u64 = 3;
 
 /// State shared by commands, the collector thread and the self-test.
 pub struct Shared {
-    pub report: Mutex<SiteReport>,
-    pub token: String,
+    pub session: Mutex<Session>,
+    pub keys: Keys,
+    /// The page's full address, for the address bar only. Never recorded.
+    pub address: Mutex<String>,
+}
+
+/// What the toolbar and panel show.
+#[derive(serde::Serialize)]
+pub struct Snapshot {
+    #[serde(flatten)]
+    pub summary: Summary,
+    pub address: String,
 }
 
 impl Shared {
-    fn summary(&self) -> Summary {
-        self.report.lock().map(|r| r.summary()).unwrap_or_default()
+    fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            summary: self
+                .session
+                .lock()
+                .map(|s| s.report.summary())
+                .unwrap_or_default(),
+            address: self.address.lock().map(|a| a.clone()).unwrap_or_default(),
+        }
     }
 }
 
@@ -135,7 +153,7 @@ pub fn normalize_url(input: &str) -> Result<Url, String> {
     };
     let url = Url::parse(&candidate).map_err(|_| "That is not a web address".to_string())?;
     match url.scheme() {
-        "http" | "https" if url.host_str().is_some() => Ok(url),
+        "http" | "https" if url.host_str().is_some() && page_may_open(&url) => Ok(url),
         _ => Err("Only http and https addresses can be opened".into()),
     }
 }
@@ -161,54 +179,45 @@ fn navigate(app: AppHandle, url: String) -> Result<(), String> {
     page(&app)?.navigate(url).map_err(|e| e.to_string())
 }
 
+// Back, forward and reload use the engine's own calls, which page code
+// cannot intercept.
 #[tauri::command]
 fn go_back(app: AppHandle) -> Result<(), String> {
-    page(&app)?
-        .eval("history.back()")
-        .map_err(|e| e.to_string())
+    history::step(&page(&app)?, history::Step::Back)
 }
 
 #[tauri::command]
 fn go_forward(app: AppHandle) -> Result<(), String> {
-    page(&app)?
-        .eval("history.forward()")
-        .map_err(|e| e.to_string())
+    history::step(&page(&app)?, history::Step::Forward)
 }
 
 #[tauri::command]
 fn reload(app: AppHandle) -> Result<(), String> {
-    page(&app)?
-        .eval("location.reload()")
-        .map_err(|e| e.to_string())
+    page(&app)?.reload().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn snapshot(shared: tauri::State<'_, Arc<Shared>>) -> Summary {
-    shared.summary()
+fn snapshot(shared: tauri::State<'_, Arc<Shared>>) -> Snapshot {
+    shared.snapshot()
 }
 
-fn random_token() -> String {
+fn random_hex() -> String {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).expect("no system randomness");
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Starts a fresh report when the page moves to another site.
-fn page_started(shared: &Shared, url: &Url) {
-    let Ok(mut report) = shared.report.lock() else {
-        return;
-    };
-    let url = url.as_str();
-    if report.site.is_empty() || !report.same_site(url) {
-        *report = SiteReport::new(url);
-    } else {
-        report.page_url = url.to_string();
-    }
+/// Schemes the page may navigate to. App pages (tauri:, ipc:), files and
+/// anything else stay out of the page view.
+/// On Windows the app's own pages are served from http://tauri.localhost,
+/// so those hosts are refused too.
+pub fn page_may_open(url: &Url) -> bool {
+    let app_host = matches!(url.host_str(), Some("tauri.localhost" | "ipc.localhost"));
+    matches!(url.scheme(), "http" | "https" | "about" | "blob" | "data") && !app_host
 }
 
 /// Collects the page's events and the cookie store in the background.
 fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
-    let drain = drain_script(&shared.token).expect("token checked at startup");
     std::thread::spawn(move || {
         let mut tick: u64 = 0;
         loop {
@@ -216,10 +225,15 @@ fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
             let Some(view) = app.get_webview(PAGE) else {
                 continue;
             };
+            let (doc, ack) = shared
+                .session
+                .lock()
+                .map(|s| s.drain_args())
+                .unwrap_or_default();
             let target = shared.clone();
-            let _ = view.eval_with_callback(drain.clone(), move |json| {
-                if let Ok(mut report) = target.report.lock() {
-                    let _ = report.add_events_json(&json);
+            let _ = view.eval_with_callback(drain_script(&shared.keys, &doc, ack), move |json| {
+                if let Ok(mut session) = target.session.lock() {
+                    let _ = session.apply(&json);
                 }
             });
             tick += 1;
@@ -235,8 +249,8 @@ fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
                             http_only: c.http_only().unwrap_or(false),
                         })
                         .collect();
-                    if let Ok(mut report) = shared.report.lock() {
-                        report.set_cookies(list);
+                    if let Ok(mut session) = shared.session.lock() {
+                        session.report.set_cookies(list);
                     }
                 }
             }
@@ -252,7 +266,7 @@ fn build_window(app: &AppHandle, shared: Arc<Shared>, start: Url) -> tauri::Resu
         .min_inner_size(640.0, 400.0)
         .build()?;
 
-    let script = detection_script(&shared.token).expect("token checked at startup");
+    let script = detection_script(&shared.keys);
     let rects = layout(w, h);
     let at = |i: usize| {
         let (_, (x, y, w, h)) = rects[i];
@@ -272,14 +286,19 @@ fn build_window(app: &AppHandle, shared: Arc<Shared>, start: Url) -> tauri::Resu
         .incognito(true)
         .initialization_script_for_all_frames(script)
         .on_page_load(move |_view, payload| {
-            if payload.event() == PageLoadEvent::Started {
-                page_started(&on_load, payload.url());
+            if payload.event() == PageLoadEvent::Started
+                || payload.event() == PageLoadEvent::Finished
+            {
+                if let Ok(mut a) = on_load.address.lock() {
+                    *a = payload.url().to_string();
+                }
             }
         })
+        .on_navigation(page_may_open)
         // Links that ask for a new window open in the page instead, so the
         // detection script is always present.
         .on_new_window(move |url, _features| {
-            if matches!(url.scheme(), "http" | "https") {
+            if matches!(url.scheme(), "http" | "https") && page_may_open(&url) {
                 if let Some(view) = opener.get_webview(PAGE) {
                     let _ = view.navigate(url);
                 }
@@ -318,11 +337,11 @@ fn build_window(app: &AppHandle, shared: Arc<Shared>, start: Url) -> tauri::Resu
 
 fn main() {
     let selftest_dir = selftest::requested_dir();
-    let token = random_token();
-    detection_script(&token).expect("random token is hex");
+    let keys = Keys::new(&random_hex(), &random_hex(), &random_hex()).expect("random keys are hex");
     let shared = Arc::new(Shared {
-        report: Mutex::new(SiteReport::default()),
-        token,
+        session: Mutex::new(Session::default()),
+        keys,
+        address: Mutex::new(String::new()),
     });
 
     let state = shared.clone();
@@ -385,5 +404,17 @@ mod tests {
         assert!(normalize_url("file:///etc/passwd").is_err());
         assert!(normalize_url("javascript://alert(1)").is_err());
         assert!(normalize_url("ftp://x.org").is_err());
+        assert!(page_may_open(&Url::parse("https://a.org").unwrap()));
+        assert!(page_may_open(&Url::parse("about:blank").unwrap()));
+        assert!(!page_may_open(
+            &Url::parse("tauri://localhost/panel.html").unwrap()
+        ));
+        assert!(!page_may_open(
+            &Url::parse("http://tauri.localhost/x").unwrap()
+        ));
+        assert!(!page_may_open(
+            &Url::parse("https://ipc.localhost/x").unwrap()
+        ));
+        assert!(!page_may_open(&Url::parse("file:///etc/passwd").unwrap()));
     }
 }

@@ -74,3 +74,4 @@ html, body {
 .panel li { padding: 3px 0; border-bottom: 1px solid var(--line); word-break: break-all; }
 .panel .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .panel .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+.panel .warn { color: var(--accent); }

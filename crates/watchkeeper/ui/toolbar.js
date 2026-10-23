@@ -26,8 +26,8 @@
   setInterval(function () {
     if (editing) return;
     invoke('snapshot').then(function (s) {
-      if (!editing && s && typeof s.page_url === 'string' && s.page_url !== 'about:blank') {
-        if (address.value !== s.page_url) address.value = s.page_url;
+      if (!editing && s && typeof s.address === 'string' && s.address !== 'about:blank') {
+        if (address.value !== s.address) address.value = s.address;
       }
     }).catch(function () { });
   }, 500);
