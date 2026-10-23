@@ -19,7 +19,10 @@
     call('navigate', { url: address.value });
     address.blur();
   };
-  address.onfocus = function () { editing = true; address.select(); };
+  // The bar starts focused, so focus alone does not mean the user is
+  // typing; only typing stops the page's address from replacing the text.
+  address.onfocus = function () { address.select(); };
+  address.oninput = function () { editing = true; };
   address.onblur = function () { editing = false; };
 
   // Keep the address bar in step with the page while the user isn't typing.

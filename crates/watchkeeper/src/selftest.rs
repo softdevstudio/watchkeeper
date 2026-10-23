@@ -678,6 +678,29 @@ fn run_checks(
 
     checks.push(check_layout(app, "layout at start"));
 
+    // The address bar starts focused; it must still show the page's address.
+    let bar = wait_until(Instant::now() + Duration::from_secs(5), || {
+        eval_json(
+            app,
+            crate::TOOLBAR,
+            "document.getElementById('address').value",
+        )
+        .map(|s| unquote(&s).starts_with(site_url))
+        .unwrap_or(false)
+    });
+    let shown = eval_json(
+        app,
+        crate::TOOLBAR,
+        "document.getElementById('address').value",
+    )
+    .map(|s| unquote(&s))
+    .unwrap_or_default();
+    checks.push(check(
+        "address bar shows the page",
+        bar,
+        format!("address bar shows {shown:?}"),
+    ));
+
     let r = report(shared);
     let summary = r.summary();
     let seen = seen_tracker_paths(&r, tracker);
