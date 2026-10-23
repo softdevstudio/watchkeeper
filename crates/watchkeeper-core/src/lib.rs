@@ -117,6 +117,9 @@ pub enum Event {
         /// the address was really contacted, not just named in a call.
         #[serde(default)]
         c: String,
+        /// "1" when it came from a sub-frame's message, not the top frame.
+        #[serde(default)]
+        m: String,
     },
     /// A cookie written by script.
     #[serde(rename = "cookie")]
@@ -267,10 +270,17 @@ impl SiteReport {
     /// Adds one event.
     pub fn add_event(&mut self, ev: Event) {
         match ev {
-            Event::Request { u, t, c, .. } => {
+            Event::Request { u, t, c, o, m } => {
                 let Some(site) = site_of_url(&u) else {
                     return;
                 };
+                // A claim of engine confirmation from a sub-frame counts
+                // only when the frame is on another site: the page can
+                // drive frames of its own site.
+                let confirmed = c == "1"
+                    && (m != "1"
+                        || site_of_url(&o).is_some_and(|s| !s.is_empty() && s != self.site));
+                let c = if confirmed { "1" } else { "" };
                 if site != self.site && !self.other_sites.contains(&site) {
                     if self.other_sites.len() < MAX_SITES {
                         self.other_sites.insert(site);

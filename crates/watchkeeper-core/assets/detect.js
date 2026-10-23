@@ -79,14 +79,21 @@
     return call(S_slice, s, [a, b]);
   }
   // JSON string encoder that uses only captured functions.
+  // Surrogate pairs are kept; a lone surrogate, which no JSON reader
+  // accepts, becomes U+FFFD.
   function jstr(s) {
     var out = '"';
+    var h = '0123456789abcdef';
     for (var i = 0; i < s.length; i++) {
       var c = call(S_charCodeAt, s, [i]);
       if (c === 34) out += '\\"';
       else if (c === 92) out += '\\\\';
-      else if (c < 32 || c === 0x2028 || c === 0x2029 || (c >= 0xd800 && c <= 0xdfff)) {
-        var h = '0123456789abcdef';
+      else if (c >= 0xd800 && c <= 0xdbff) {
+        var d = i + 1 < s.length ? call(S_charCodeAt, s, [i + 1]) : 0;
+        if (d >= 0xdc00 && d <= 0xdfff) { out += S_fromCharCode(c) + S_fromCharCode(d); i++; }
+        else out += '\\ufffd';
+      } else if (c >= 0xdc00 && c <= 0xdfff) out += '\\ufffd';
+      else if (c < 32 || c === 0x2028 || c === 0x2029) {
         out += '\\u' + h[(c >> 12) & 15] + h[(c >> 8) & 15] + h[(c >> 4) & 15] + h[c & 15];
       } else out += S_fromCharCode(c);
     }
@@ -96,6 +103,7 @@
     // Every event is a flat record of strings with a fixed set of fields.
     var out = '{"k":' + jstr(ev.k) + ',"o":' + jstr(ev.o);
     if (ev.c) out += ',"c":"1"';
+    if (ev.m) out += ',"m":"1"';
     if (ev.u !== undefined) out += ',"u":' + jstr(ev.u);
     if (ev.t !== undefined) out += ',"t":' + jstr(ev.t);
     if (ev.n !== undefined) out += ',"n":' + jstr(ev.n);
@@ -147,9 +155,11 @@
   var next = 1;            // seq the next event gets
   var dropped = 0;         // events lost: buffer full or over a limit
   var DOC = newDoc();
-  var seen, seenHost, nHost, nHostConf, nSeen;
+  var lastEnd = 1;         // one past the last event in the latest answer
+  var seen, seenHost, nHost, nHostConf, nSeen, nSeenConf, nSeenReserve;
   function resetSeen() {
-    seen = O_create(null); seenHost = O_create(null); nHost = 0; nHostConf = 0; nSeen = 0;
+    seen = O_create(null); seenHost = O_create(null);
+    nHost = 0; nHostConf = 0; nSeen = 0; nSeenConf = 0; nSeenReserve = 0;
   }
   resetSeen();
 
@@ -166,7 +176,7 @@
 
   // o is the origin of the frame the event came from, as the engine
   // reports it, never as a page claims it.
-  function accept(k, a, b, c, o) {
+  function accept(k, a, b, c, o, fromMsg) {
     var ev, key, urgent = 0;
     if (k === 'res') {
       var cl = clean(a);
@@ -188,7 +198,7 @@
         seenHost[hk] = count + 1;
         urgent = conf ? 2 : 1;
       }
-      ev = { k: 'res', o: o, u: cl.url, t: t, c: conf };
+      ev = { k: 'res', o: o, u: cl.url, t: t, c: conf, m: fromMsg ? '1' : '' };
     } else if (k === 'cookie') {
       var n = field(a, 256);
       if (!n) return;
@@ -212,14 +222,26 @@
     } else {
       return;
     }
-    if (nSeen >= 60000) { dropped++; return; }
-    seen[key] = 1; nSeen++;
+    // Requests the engine confirmed and fingerprinting reads are counted
+    // apart, so a flood of calls cannot use up the room they need.
+    if (ev.k === 'fp' || (ev.k === 'res' && ev.c && !fromMsg)) {
+      if (nSeenConf >= 60000) { dropped++; return; }
+      nSeenConf++;
+    } else if (urgent) {
+      // A host's first addresses: their own count too.
+      if (nSeenReserve >= 60000) { dropped++; return; }
+      nSeenReserve++;
+    } else {
+      if (nSeen >= 60000) { dropped++; return; }
+      nSeen++;
+    }
+    seen[key] = 1;
     enqueue(encodeEvent(ev), urgent);
   }
 
   // Sub-frames send plain fields; the top frame does the rest.
   function submit(k, a, b, c) {
-    if (isTop) { accept(k, a, b, c, origin); return; }
+    if (isTop) { accept(k, a, b, c, origin, false); return; }
     try {
       var msg = O_create(null);
       R_defineProperty(msg, 'wk', { value: FRAMEKEY, enumerable: true });
@@ -324,9 +346,9 @@
           while (head <= ack && head < next) { delete buf[head]; head++; }
         }
         if (skip === true && doc === DOC) {
-          // The app could not read the last answer: give up on what is held.
-          dropped += next - head;
-          while (head < next) { delete buf[head]; head++; }
+          // The app could not read the last answers: give up on what they
+          // held, nothing newer.
+          while (head < lastEnd && head < next) { delete buf[head]; head++; dropped++; }
         }
         sweep();
         var from = head;
@@ -335,10 +357,12 @@
         var c = clean(href);
         var out = '{"doc":' + jstr(DOC) + ',"url":' + jstr(c ? c.url : cut(str(href), 512)) +
           ',"from":' + S_String(from) + ',"dropped":' + S_String(dropped) + ',"ev":[';
-        for (var i = from; i < next && i < from + 10000; i++) {
+        var i = from;
+        for (; i < next && i < from + 10000; i++) {
           if (i > from && out.length + buf[i].length > MAX_BATCH_CHARS) break;
           out += (i > from ? ',' : '') + buf[i];
         }
+        lastEnd = i;
         return out + ']}';
       }
     });
@@ -355,12 +379,13 @@
         if (!d || typeof d !== 'object') return;
         try {
           if (d.wk !== FRAMEKEY) return;
+          // Opaque origins (sandboxed frames) and the page's own origin can
+          // be driven by the page, so they may not claim the engine
+          // confirmed an address. The app also refuses the claim from any
+          // origin on the page's own site.
           if (o === 'null') o = '';
-          // The top page can post messages to itself, so messages from its
-          // own origin may not claim the engine confirmed an address. A
-          // cross-site frame can only speak for its own origin.
-          var conf = o !== origin && d.c === '1' ? '1' : '';
-          accept(d.k, d.a, d.b, conf, cut(o, 512));
+          var conf = o && o !== origin && d.c === '1' ? '1' : '';
+          accept(d.k, d.a, d.b, conf, cut(o, 512), true);
         } catch (e) { /* hostile object */ }
       }, true]);
     }

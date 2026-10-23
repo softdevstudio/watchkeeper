@@ -161,7 +161,7 @@ fn serve(
         None => (target.clone(), String::new()),
     };
     // The hostile page's own flood is not part of the ground truth.
-    if path != "/favicon.ico" && !path.starts_with("/flood") {
+    if path != "/favicon.ico" && !path.starts_with("/flood") && !path.starts_with("/seen") {
         if let Ok(mut h) = hits.lock() {
             h.push(Hit {
                 path: path.clone(),
@@ -376,7 +376,22 @@ fn hostile_page(tracker: &str) -> String {
       for (var j = 0; j < 3000; j++) msgs.push({{ wk: key, k: 'res', a: 'https://forged' + j + '.example/p', b: 'img', c: '1' }});
       msgs.forEach(function (m) {{ try {{ window.postMessage(m, '*'); forged++; }} catch (e) {{ }} }});
     }}
+    // A sandboxed frame has an opaque origin. Given the key, it claims
+    // made-up sites were confirmed by the engine.
+    if (key) {{
+      var sb = document.createElement('iframe');
+      sb.setAttribute('sandbox', 'allow-scripts');
+      sb.srcdoc = '<script>addEventListener("message", function (m) {{ for (var i = 0; i < 4200; i++) parent.postMessage({{ wk: m.data, k: "res", a: "https://sandboxed" + i + ".example/p", b: "img", c: "1" }}, "*"); }});<\/script>';
+      sb.onload = function () {{ sb.contentWindow.postMessage(key, '*'); }};
+      document.body.appendChild(sb);
+    }}
     fetch('/h-forged?key=' + (key ? 1 : 0) + '&n=' + forged);
+    // A storage key with a lone surrogate, which a careless encoder turns
+    // into text no JSON reader accepts.
+    localStorage.setItem('\ud800bad', '1');
+    // 61,000 distinct calls that go nowhere, to use up any count of
+    // things seen.
+    for (var q = 0; q < 61000; q++) {{ var z = new XMLHttpRequest(); z.open('GET', '/seen' + q); }}
 
     // Floods. Real engines write cookies slowly (WebKitGTK takes tens of
     // milliseconds each once a few hundred exist), so the cookie flood is
@@ -401,11 +416,13 @@ fn hostile_page(tracker: &str) -> String {
     Object.prototype.apply = function () {{ }};
     Object.prototype.construct = function () {{ }};
 
-    // A real new site after all that.
-    new Image().src = '{v6}/sf-pixel.gif';
-    var s = document.createElement('script');
-    s.src = '{tracker}/h-tracker.js';
-    document.head.appendChild(s);
+    // A real new site after all that, once the sandboxed frame has sent.
+    setTimeout(function () {{
+      new Image().src = '{v6}/sf-pixel.gif';
+      var s = document.createElement('script');
+      s.src = '{tracker}/h-tracker.js';
+      document.head.appendChild(s);
+    }}, 600);
   }}, 800);
 }})();
 </script>
@@ -909,6 +926,13 @@ fn run_checks(
         ),
     ));
 
+    let fffd = r.has_storage("localStorage", "\u{fffd}bad");
+    checks.push(check(
+        "broken text cannot stop collection",
+        fffd && done && missing.is_empty(),
+        format!("storage key with a lone surrogate recorded as \\u{{fffd}}bad: {fffd}; collection carried on: {}", missing.is_empty()),
+    ));
+
     let v6_hit = tracker.has("/sf-pixel.gif");
     let v6_listed = r.other_sites.iter().any(|s| s == "[::1]");
     checks.push(check(
@@ -918,7 +942,7 @@ fn run_checks(
             "skipped: no IPv6 loopback on this machine".to_string()
         } else {
             format!(
-                "after 2,100 made-up sites and 3,000 forged ones, [::1] contacted {v6_hit}, listed {v6_listed}; {} sites listed",
+                "after 2,100 made-up sites, 3,000 forged ones, 4,200 claimed by a sandboxed frame and 61,000 calls, [::1] contacted {v6_hit}, listed {v6_listed}; {} sites listed",
                 r.other_sites.len()
             )
         },

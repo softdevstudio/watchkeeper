@@ -133,6 +133,7 @@ fn storage_cookies_and_origins() {
         t: "img".into(),
         o: String::new(),
         c: String::new(),
+        m: String::new(),
     });
     r.set_cookies(vec![
         StoredCookie {
@@ -175,6 +176,7 @@ fn a_cookie_flood_cannot_hide_a_tracker() {
         t: "img".into(),
         o: String::new(),
         c: String::new(),
+        m: String::new(),
     });
     let s = r.summary();
     assert_eq!(s.third_party_sites, vec!["tracker.net"]);
@@ -190,6 +192,7 @@ fn an_address_flood_cannot_hide_a_new_site() {
             t: "xhr".into(),
             o: String::new(),
             c: String::new(),
+            m: String::new(),
         });
     }
     r.add_event(Event::Request {
@@ -197,6 +200,7 @@ fn an_address_flood_cannot_hide_a_new_site() {
         t: "img".into(),
         o: String::new(),
         c: String::new(),
+        m: String::new(),
     });
     for i in 0..60 {
         r.add_event(Event::Request {
@@ -204,6 +208,7 @@ fn an_address_flood_cannot_hide_a_new_site() {
             t: "img".into(),
             o: String::new(),
             c: String::new(),
+            m: String::new(),
         });
     }
     let s = r.summary();
@@ -225,6 +230,7 @@ fn long_text_is_clipped() {
         t: "img".into(),
         o: String::new(),
         c: String::new(),
+        m: String::new(),
     });
     let key = r.requests.keys().next().unwrap();
     assert!(key.len() <= MAX_TEXT);
@@ -262,6 +268,7 @@ fn made_up_sites_cannot_hide_a_confirmed_one() {
             t: "xhr".into(),
             o: String::new(),
             c: String::new(),
+            m: String::new(),
         });
     }
     r.add_event(Event::Request {
@@ -269,10 +276,47 @@ fn made_up_sites_cannot_hide_a_confirmed_one() {
         t: "img".into(),
         o: String::new(),
         c: "1".into(),
+        m: String::new(),
     });
     let s = r.summary();
     assert!(s
         .third_party_sites
         .contains(&"real-tracker.net".to_string()));
     assert_eq!(s.dropped, 100);
+}
+
+#[test]
+fn same_site_frames_cannot_claim_confirmation() {
+    use watchkeeper_core::MAX_SITES;
+    let mut r = SiteReport::new(PAGE);
+    for i in 0..MAX_SITES {
+        r.add_event(Event::Request {
+            u: format!("https://junk{i}.example/x"),
+            t: "xhr".into(),
+            o: String::new(),
+            c: String::new(),
+            m: String::new(),
+        });
+    }
+    // From a frame on the page's own site, or an opaque one: refused.
+    for (i, o) in ["https://sub.news.example.com", ""].iter().enumerate() {
+        r.add_event(Event::Request {
+            u: format!("https://fake{i}.example/p"),
+            t: "img".into(),
+            o: o.to_string(),
+            c: "1".into(),
+            m: "1".into(),
+        });
+    }
+    // From a frame on another site: accepted.
+    r.add_event(Event::Request {
+        u: "https://cdn.other.net/p".into(),
+        t: "img".into(),
+        o: "https://frame.other.net".into(),
+        c: "1".into(),
+        m: "1".into(),
+    });
+    let s = r.summary();
+    assert!(!s.third_party_sites.iter().any(|x| x.starts_with("fake")));
+    assert!(s.third_party_sites.contains(&"other.net".to_string()));
 }
