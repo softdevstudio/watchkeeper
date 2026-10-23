@@ -1,14 +1,14 @@
 {
   "format": "watchkeeper-report",
   "format_version": 1,
-  "watchkeeper": "0.3.0",
+  "watchkeeper": "0.3.1",
   "system": "linux x86_64",
-  "saved": "2026-10-23 14:25:41 UTC",
+  "saved": "2026-10-23 15:28:16 UTC",
   "site": "127.0.0.1",
-  "page_address": "http://127.0.0.1:35021/",
+  "page_address": "http://127.0.0.1:43781/",
   "summary": {
     "site": "127.0.0.1",
-    "page_url": "http://127.0.0.1:35021/",
+    "page_url": "http://127.0.0.1:43781/",
     "third_party_sites": [
       "localhost"
     ],
@@ -49,87 +49,87 @@
       "confirmed": true,
       "addresses": [
         {
-          "address": "http://localhost:34577/beacon",
+          "address": "http://localhost:34011/beacon",
           "kinds": [
             "beacon",
             "other"
           ]
         },
         {
-          "address": "http://localhost:34577/collect",
+          "address": "http://localhost:34011/collect",
           "kinds": [
             "fetch"
           ]
         },
         {
-          "address": "http://localhost:34577/fp",
+          "address": "http://localhost:34011/fp",
           "kinds": [
             "fetch"
           ]
         },
         {
-          "address": "http://localhost:34577/frame-call",
+          "address": "http://localhost:34011/frame-call",
           "kinds": [
             "fetch"
           ]
         },
         {
-          "address": "http://localhost:34577/frame.html",
+          "address": "http://localhost:34011/frame.html",
           "kinds": [
             "iframe"
           ]
         },
         {
-          "address": "http://localhost:34577/late",
+          "address": "http://localhost:34011/late",
           "kinds": [
             "fetch"
           ]
         },
         {
-          "address": "http://localhost:34577/pixel.gif",
+          "address": "http://localhost:34011/pixel.gif",
           "kinds": [
             "img"
           ]
         },
         {
-          "address": "http://localhost:34577/style.css",
+          "address": "http://localhost:34011/style.css",
           "kinds": [
             "link"
           ]
         },
         {
-          "address": "http://localhost:34577/tracker.js",
+          "address": "http://localhost:34011/tracker.js",
           "kinds": [
             "script"
           ]
         },
         {
-          "address": "http://localhost:34577/wrap",
+          "address": "http://localhost:34011/wrap",
           "kinds": [
             "fetch"
           ]
         },
         {
-          "address": "http://localhost:34577/xhr",
+          "address": "http://localhost:34011/xhr",
           "kinds": [
             "xhr",
             "xmlhttprequest"
           ]
         },
         {
-          "address": "ws://localhost:34577/tt-first",
+          "address": "ws://localhost:34011/tt-first",
           "kinds": [
             "websocket"
           ]
         },
         {
-          "address": "ws://localhost:34577/ws",
+          "address": "ws://localhost:34011/ws",
           "kinds": [
             "websocket"
           ]
         },
         {
-          "address": "ws://localhost:34577/ws-sub",
+          "address": "ws://localhost:34011/ws-sub",
           "kinds": [
             "websocket"
           ]
@@ -139,13 +139,13 @@
   ],
   "own_addresses": [
     {
-      "address": "http://127.0.0.1:35021/(worker%20from%20a%20blob)",
+      "address": "http://127.0.0.1:43781/(worker%20from%20a%20blob)",
       "kinds": [
         "worker"
       ]
     },
     {
-      "address": "http://127.0.0.1:35021/ipc",
+      "address": "http://127.0.0.1:43781/ipc",
       "kinds": [
         "fetch"
       ]
@@ -230,7 +230,7 @@
     }
   ],
   "workers": [
-    "http://127.0.0.1:35021/(worker%20from%20a%20blob)"
+    "http://127.0.0.1:43781/(worker%20from%20a%20blob)"
   ],
   "dropped": 0,
   "last_visit": null,

@@ -1,19 +1,19 @@
-date: 2026-10-23T14:25:24Z
-commit: 146eb86
+date: 2026-10-23T15:27:57Z
+commit: 3c18d1e
 os: linux (Linux 6.18.44-fc-v153 x86_64)
 rustc 1.97.0 (2d8144b78 2026-07-07)
 cargo 1.97.0 (c980f4866 2026-06-30)
 
 == cargo fmt --all -- --check
 == cargo clippy --locked --all-targets -- -D warnings
-    Checking watchkeeper-core v0.3.0 (/home/claude/watchkeeper/crates/watchkeeper-core)
-   Compiling watchkeeper v0.3.0 (/home/claude/watchkeeper/crates/watchkeeper)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.29s
+    Checking watchkeeper-core v0.3.1 (/home/claude/watchkeeper/crates/watchkeeper-core)
+   Compiling watchkeeper v0.3.1 (/home/claude/watchkeeper/crates/watchkeeper)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.70s
 == cargo test --locked
-   Compiling watchkeeper-core v0.3.0 (/home/claude/watchkeeper/crates/watchkeeper-core)
-   Compiling watchkeeper v0.3.0 (/home/claude/watchkeeper/crates/watchkeeper)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.62s
-     Running unittests src/main.rs (target/debug/deps/watchkeeper-ee32252adfc34aef)
+   Compiling watchkeeper v0.3.1 (/home/claude/watchkeeper/crates/watchkeeper)
+   Compiling watchkeeper-core v0.3.1 (/home/claude/watchkeeper/crates/watchkeeper-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.64s
+     Running unittests src/main.rs (target/debug/deps/watchkeeper-1d770f0dacfaa0bf)
 
 running 5 tests
 test recorder::tests::off_keeps_nothing ... ok
@@ -24,7 +24,7 @@ test recorder::tests::forgetting_holds_for_the_visit_in_progress ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (target/debug/deps/watchkeeper_core-e1d9065d6cbdc3fa)
+     Running unittests src/lib.rs (target/debug/deps/watchkeeper_core-93676dcc34a463a7)
 
 running 2 tests
 test tests::sites ... ok
@@ -32,31 +32,31 @@ test tests::keys_are_checked ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/export.rs (target/debug/deps/export-5c3329a3ca63f444)
+     Running tests/export.rs (target/debug/deps/export-f884cf1aaf1b531f)
 
 running 6 tests
 test hostile_names_stay_text ... ok
 test names_and_times ... ok
 test naming_a_site_does_not_name_its_cookies ... ok
 test report_holds_everything_seen ... ok
-test files_are_never_overwritten ... ok
 test site_list_matches_the_panel ... ok
+test files_are_never_overwritten ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
 
-     Running tests/history.rs (target/debug/deps/history-618d6b5fcba969a5)
+     Running tests/history.rs (target/debug/deps/history-8747c52fdfe23447)
 
 running 6 tests
-test damaged_file_is_set_aside ... ok
 test compare_with_last_visit ... ok
 test dates ... ok
+test damaged_file_is_set_aside ... ok
 test save_load_forget ... ok
 test size_stays_within_budget ... ok
 test limits ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
 
-     Running tests/report.rs (target/debug/deps/report-a1f78ca641adef17)
+     Running tests/report.rs (target/debug/deps/report-c6f63bb181ccd401)
 
 running 14 tests
 test acknowledged_events_are_not_counted_twice ... ok
@@ -69,12 +69,12 @@ test new_site_resets_same_site_carries_on_stale_ignored ... ok
 test nothing_double_encoded_and_malformed ... ok
 test page_dropped_counts_are_reported ... ok
 test same_site ... ok
-test same_site_frames_cannot_claim_confirmation ... ok
+test an_address_flood_cannot_hide_a_new_site ... ok
 test storage_cookies_and_origins ... ok
 test unreadable_answers_lead_to_skip ... ok
-test an_address_flood_cannot_hide_a_new_site ... ok
+test same_site_frames_cannot_claim_confirmation ... ok
 
-test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
 
    Doc-tests watchkeeper_core
 
@@ -87,6 +87,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 == selftest
 PASS page loaded: tracker received 15 requests
 PASS layout at start: content 1200x800; toolbar 1200x48 at (0,0), page 880x752 at (0,48), panel 320x752 at (880,48)
+PASS address bar shows the page: address bar shows "http://127.0.0.1:43781/"
 PASS every tracker request seen: 14 distinct tracker addresses seen: /beacon /collect /fp /frame-call /frame.html /late /pixel.gif /style.css /tracker.js /tt-first /wrap /ws /ws-sub /xhr; known out of sight: /worker-call; made by the engine itself: none
 PASS sites told apart: site 127.0.0.1 contacted ["localhost"]
 PASS WebSockets seen: tracker server saw ["/ws", "/ws-sub"]; report has /ws true and /ws-sub true
@@ -98,7 +99,7 @@ PASS fingerprinting reads seen: tracker reported "canvas=1&webgl=1&audio=1&idb=1
 PASS fingerprinting credited to the script's site: seen ["audio by localhost", "canvas by localhost", "webgl by localhost"]; not credited to localhost: []
 PASS server cookie read from the engine: 3 cookies in the store: wk_session@127.0.0.1 (HttpOnly), wk_page@127.0.0.1, wk_js@127.0.0.1
 PASS page cannot call app commands: IPC bridge present, snapshot command refused
-PASS report saved from the panel only: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-142541.html", "watchkeeper-127.0.0.1-2026-10-23-142541.json"]; JSON parses: true, lists 14 of 14 tracker addresses (missing []) and 1 other sites, as the panel counts 1; HTML 5194 bytes, inert: true
+PASS report saved from the panel only: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-152816.html", "watchkeeper-127.0.0.1-2026-10-23-152816.json"]; JSON parses: true, lists 14 of 14 tracker addresses (missing []) and 1 other sites, as the panel counts 1; HTML 5194 bytes, inert: true
 PASS layout after resize: content 900x600; toolbar 900x48 at (0,0), page 580x552 at (0,48), panel 320x552 at (580,48)
 PASS hostile page cannot blind the detector: after the page replaced built-ins and flooded, still seen: /h-tracker.js /h-pixel.gif /h-collect /h-beacon; WebSocket /h-ws seen
 PASS hostile page cannot drain the collector: page reported "found=1&drained=0" (found = collectors it could name)
@@ -106,9 +107,9 @@ PASS forged frame messages cannot stall or corrupt collection: page learned the 
 PASS broken text cannot stop collection: storage key with a lone surrogate recorded as \u{fffd}bad: true; collection carried on: true
 PASS page cannot hide or fake who fingerprints: with the stack limit at 0, the tracker's own read named its script: true; a data: script naming an unloaded script credited to it: false, shown as unknown: true; a rewritten stack credited: false
 PASS made-up sites cannot hide a real new one: skipped: no IPv6 loopback on this machine
-PASS hostile page's report stays inert: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-142552.html", "watchkeeper-127.0.0.1-2026-10-23-142552.json"]; JSON parses: true, lists 21 of 21 tracker addresses (missing []) and 2000 other sites, as the panel counts 2000; HTML 816399 bytes, inert: true
+PASS hostile page's report stays inert: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-152826.html", "watchkeeper-127.0.0.1-2026-10-23-152826.json"]; JSON parses: true, lists 21 of 21 tracker addresses (missing []) and 2000 other sites, as the panel counts 2000; HTML 816399 bytes, inert: true
 PASS floods are reported, not hidden: 73827 events from the flood reported as not counted; 9004 distinct addresses kept
-PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:35021/hostile; the page's history.back called: false
+PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:43781/hostile; the page's history.back called: false
 PASS a page brought back by Back is watched as its own site: report site went localhost (localhost) then 127.0.0.1; after Back the page called ["/after-back-restored"], all in the report: true
 PASS history kept per site: on 127.0.0.1, last visit Some("2026-10-23 with 2000 other sites"); file holds 515 bytes for sites ["127.0.0.1", "localhost"]; no addresses, cookie names or made-up sites: true
 PASS only the panel can forget history: after the page called forget: ["127.0.0.1", "localhost"]; panel forgot localhost: true; then everything: true; still empty after the visit carried on: true

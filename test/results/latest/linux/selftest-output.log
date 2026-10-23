@@ -2,6 +2,7 @@ libEGL warning: DRI3 error: Could not get DRI3 device
 libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering
 PASS page loaded: tracker received 15 requests
 PASS layout at start: content 1200x800; toolbar 1200x48 at (0,0), page 880x752 at (0,48), panel 320x752 at (880,48)
+PASS address bar shows the page: address bar shows "http://127.0.0.1:43781/"
 PASS every tracker request seen: 14 distinct tracker addresses seen: /beacon /collect /fp /frame-call /frame.html /late /pixel.gif /style.css /tracker.js /tt-first /wrap /ws /ws-sub /xhr; known out of sight: /worker-call; made by the engine itself: none
 PASS sites told apart: site 127.0.0.1 contacted ["localhost"]
 PASS WebSockets seen: tracker server saw ["/ws", "/ws-sub"]; report has /ws true and /ws-sub true
@@ -13,7 +14,7 @@ PASS fingerprinting reads seen: tracker reported "canvas=1&webgl=1&audio=1&idb=1
 PASS fingerprinting credited to the script's site: seen ["audio by localhost", "canvas by localhost", "webgl by localhost"]; not credited to localhost: []
 PASS server cookie read from the engine: 3 cookies in the store: wk_session@127.0.0.1 (HttpOnly), wk_page@127.0.0.1, wk_js@127.0.0.1
 PASS page cannot call app commands: IPC bridge present, snapshot command refused
-PASS report saved from the panel only: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-142541.html", "watchkeeper-127.0.0.1-2026-10-23-142541.json"]; JSON parses: true, lists 14 of 14 tracker addresses (missing []) and 1 other sites, as the panel counts 1; HTML 5194 bytes, inert: true
+PASS report saved from the panel only: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-152816.html", "watchkeeper-127.0.0.1-2026-10-23-152816.json"]; JSON parses: true, lists 14 of 14 tracker addresses (missing []) and 1 other sites, as the panel counts 1; HTML 5194 bytes, inert: true
 PASS layout after resize: content 900x600; toolbar 900x48 at (0,0), page 580x552 at (0,48), panel 320x552 at (580,48)
 PASS hostile page cannot blind the detector: after the page replaced built-ins and flooded, still seen: /h-tracker.js /h-pixel.gif /h-collect /h-beacon; WebSocket /h-ws seen
 PASS hostile page cannot drain the collector: page reported "found=1&drained=0" (found = collectors it could name)
@@ -21,9 +22,9 @@ PASS forged frame messages cannot stall or corrupt collection: page learned the 
 PASS broken text cannot stop collection: storage key with a lone surrogate recorded as \u{fffd}bad: true; collection carried on: true
 PASS page cannot hide or fake who fingerprints: with the stack limit at 0, the tracker's own read named its script: true; a data: script naming an unloaded script credited to it: false, shown as unknown: true; a rewritten stack credited: false
 PASS made-up sites cannot hide a real new one: skipped: no IPv6 loopback on this machine
-PASS hostile page's report stays inert: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-142552.html", "watchkeeper-127.0.0.1-2026-10-23-142552.json"]; JSON parses: true, lists 21 of 21 tracker addresses (missing []) and 2000 other sites, as the panel counts 2000; HTML 816399 bytes, inert: true
+PASS hostile page's report stays inert: page's save refused: true; panel saved ["watchkeeper-127.0.0.1-2026-10-23-152826.html", "watchkeeper-127.0.0.1-2026-10-23-152826.json"]; JSON parses: true, lists 21 of 21 tracker addresses (missing []) and 2000 other sites, as the panel counts 2000; HTML 816399 bytes, inert: true
 PASS floods are reported, not hidden: 73827 events from the flood reported as not counted; 9004 distinct addresses kept
-PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:35021/hostile; the page's history.back called: false
+PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:43781/hostile; the page's history.back called: false
 PASS a page brought back by Back is watched as its own site: report site went localhost (localhost) then 127.0.0.1; after Back the page called ["/after-back-restored"], all in the report: true
 PASS history kept per site: on 127.0.0.1, last visit Some("2026-10-23 with 2000 other sites"); file holds 515 bytes for sites ["127.0.0.1", "localhost"]; no addresses, cookie names or made-up sites: true
 PASS only the panel can forget history: after the page called forget: ["127.0.0.1", "localhost"]; panel forgot localhost: true; then everything: true; still empty after the visit carried on: true

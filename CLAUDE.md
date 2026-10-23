@@ -109,6 +109,13 @@ October 23, 2026, session 4 (version 0.3) done, at YK's word "Go":
 - Self-test now 27 checks, adding a saved report after the ordinary page and after the hostile one. The page's save must be refused. The JSON must parse, list every tracker address the report holds, and list the same sites the panel counts. The HTML must have no script or image elements and no links, even with a storage key built to break it. scripts/record-results.sh keeps the ordinary page's report as a sample in test/results.
 - Independent review in three rounds by the same reviewer agent. Round 1: earlier sites' cookies named in reports, the site list disagreeing with the panel's count after a flood, the fingerprinting card measuring something else, bidi and invisible characters, half-written files. Round 2: a page naming a site in an unsent call brought that site's cookies back, unlisted addresses not said, a few more invisible characters. Round 3: all fixed, no regressions.
 
+October 23, 2026, session 5 (site) done, at YK's word "Go":
+
+- photozeitgeist/watchkeeper.net held a copy of the Launch template with an earlier project's content. Its pages, posts and images were removed; themes/, archetypes/, README.md (the theme guide), .gitignore and content/archive/_index.md are unchanged. config.toml has Watchkeeper's values: hero, four figures from test/results/latest/linux (14 of 14 tracker addresses, 73,827 flood events counted, 28 checks, Apache 2.0), a Reference menu item and a default share image.
+- Pages: about, contact, quick start (/quick-start/), download (/download/, latest-release installer links and unsigned install steps) and reference (/reference/: panel lines, attribution, limits, command line, files kept, report format, what it can't see). Posts dated 2026-10-23: the launch, how web tracking works, how it was tested, the name. Images in static/images: a real screenshot of the app on a made-up news page served locally (second visit, with Last visit), and three drawn images.
+- Hugo could not be installed in the cloud session, so the site was checked by parsing front matter against the rules and checking every internal link; it was not built locally.
+- The screenshot showed the address bar empty at start (autofocus set the toolbar's editing flag). Fixed in toolbar.js: only typing pauses the bar, and an untouched focused bar keeps its text selected. Self-test check "address bar shows the page" added (28 checks); the reviewer confirmed it fails on the old code. Released as 0.3.1.
+
 ## Next
 
-October 23, 2026: YK approved session 5 ("Go"): the watchkeeper.net site on the Launch template, numbers from recorded results.
+Nothing approved beyond session 5. All five plan items are done. Waiting for YK.

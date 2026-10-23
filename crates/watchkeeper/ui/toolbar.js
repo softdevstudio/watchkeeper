@@ -30,7 +30,12 @@
     if (editing) return;
     invoke('snapshot').then(function (s) {
       if (!editing && s && typeof s.address === 'string' && s.address !== 'about:blank') {
-        if (address.value !== s.address) address.value = s.address;
+        if (address.value !== s.address) {
+          address.value = s.address;
+          // Still focused and untouched: keep it selected, so typing
+          // replaces the address instead of adding to its end.
+          if (document.activeElement === address) address.select();
+        }
       }
     }).catch(function () { });
   }, 500);
