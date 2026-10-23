@@ -115,6 +115,7 @@ Results are written to `results-dir/selftest.json`; the exit code is 0 only if e
 
 - `crates/watchkeeper-core`: the detection script and site reports. No window code, so it can be shared with Unweb later.
 - `crates/watchkeeper`: the app, built with Tauri 2.
+- `examples/case-studies`: made-up sites, served by one Python script, used for the case studies and use examples on watchkeeper.net.
 - `scripts/record-results.sh`: runs every check and records the results.
 - `scripts/third-party-licenses.py`: regenerates THIRD_PARTY_LICENSES.md.
 
