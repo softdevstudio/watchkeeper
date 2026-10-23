@@ -13,10 +13,13 @@ fn visit(date: &str, sites: &[&str]) -> Visit {
     }
 }
 
+/// A folder of its own for each call: clock ticks are coarse on Windows.
 fn dir() -> std::path::PathBuf {
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut d = std::env::temp_dir();
     d.push(format!(
-        "wk-history-{}-{}",
+        "wk-history-{}-{n}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

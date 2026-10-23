@@ -133,10 +133,12 @@ mod tests {
         }
     }
 
-    fn temp_file() -> PathBuf {
+    /// A file of its own for each test: clock ticks are coarse on Windows,
+    /// so the name also carries the test's name.
+    fn temp_file(name: &str) -> PathBuf {
         let mut d = std::env::temp_dir();
         d.push(format!(
-            "wk-recorder-{}-{}",
+            "wk-recorder-{name}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -158,7 +160,7 @@ mod tests {
 
     #[test]
     fn visits_and_comparison() {
-        let p = temp_file();
+        let p = temp_file("visits");
         let mut r = Recorder::new(Some(p.clone()));
         r.observe(&summary("", &[]), 1);
         assert!(r.history.sites.is_empty(), "no site, nothing kept");
@@ -177,6 +179,7 @@ mod tests {
             "only for the visit in progress"
         );
         r.save_if_dirty();
+        assert!(r.note.is_none(), "{:?}", r.note);
         let again = Recorder::new(Some(p.clone()));
         assert_eq!(again.history.sites.len(), 2);
         assert!(again.note.is_none());
@@ -184,7 +187,7 @@ mod tests {
 
     #[test]
     fn forgetting_holds_for_the_visit_in_progress() {
-        let p = temp_file();
+        let p = temp_file("forget");
         let mut r = Recorder::new(Some(p.clone()));
         r.observe(&summary("a.com", &["t.net"]), 1);
         r.observe(&summary("b.com", &["t.net"]), 2);
