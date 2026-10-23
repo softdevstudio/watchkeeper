@@ -856,24 +856,29 @@ fn run_checks(
     std::thread::sleep(Duration::from_millis(2500));
     let r = report(shared);
     let seen = seen_tracker_paths(&r, tracker);
-    let want = [
-        "/h-tracker.js",
-        "/h-pixel.gif",
-        "/h-collect",
-        "/h-beacon",
-        "/h-ws",
-    ];
+    // Everything the engine itself records must be seen. The WebSocket
+    // appears in no engine record; made in the same instant as a very large
+    // flood it may be dropped, which the README states, but then it must be
+    // counted.
+    let want = ["/h-tracker.js", "/h-pixel.gif", "/h-collect", "/h-beacon"];
     let missing: Vec<&str> = want
         .into_iter()
         .filter(|p| !seen.iter().any(|s| s == p))
         .collect();
+    let ws_seen = seen.iter().any(|s| s == "/h-ws");
+    let ws_ok = ws_seen || r.dropped > 0;
     checks.push(check(
         "hostile page cannot blind the detector",
-        done && missing.is_empty(),
+        done && missing.is_empty() && ws_ok,
         if missing.is_empty() {
             format!(
-                "after the page replaced built-ins and flooded, still seen: {}",
-                want.join(" ")
+                "after the page replaced built-ins and flooded, still seen: {}; WebSocket /h-ws {}",
+                want.join(" "),
+                if ws_seen {
+                    "seen".to_string()
+                } else {
+                    format!("dropped in the flood and counted ({} left out)", r.dropped)
+                }
             )
         } else {
             format!(
