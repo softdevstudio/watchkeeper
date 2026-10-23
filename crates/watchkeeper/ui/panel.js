@@ -9,6 +9,7 @@
     if (key === last) return;
     last = key;
     set('site', s.site || 'No page yet');
+    document.getElementById('hint').hidden = !!s.site;
     set('sites', s.third_party_sites.length);
     var ul = document.getElementById('site-list');
     ul.textContent = '';

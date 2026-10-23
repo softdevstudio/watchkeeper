@@ -140,6 +140,16 @@ pub fn normalize_url(input: &str) -> Result<Url, String> {
     }
 }
 
+/// The first command-line argument that is a web address, or a blank
+/// page. `watchkeeper example.com` opens example.com.
+fn start_url_from_args() -> Url {
+    std::env::args()
+        .skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .find_map(|a| normalize_url(&a).ok())
+        .unwrap_or_else(|| Url::parse("about:blank").expect("valid"))
+}
+
 fn page(app: &AppHandle) -> Result<tauri::Webview, String> {
     app.get_webview(PAGE)
         .ok_or_else(|| "The page is not ready".to_string())
@@ -325,7 +335,7 @@ fn main() {
             let handle = app.handle().clone();
             let start = match &selftest_dir {
                 Some(dir) => selftest::start(&handle, shared.clone(), dir.clone())?,
-                None => Url::parse("about:blank").expect("valid"),
+                None => start_url_from_args(),
             };
             build_window(&handle, shared.clone(), start)?;
             spawn_collector(handle, shared.clone());
