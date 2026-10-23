@@ -70,6 +70,11 @@
       "detail": "IPC bridge present, snapshot command refused"
     },
     {
+      "name": "report saved from the panel only",
+      "pass": true,
+      "detail": "page's save refused: true; panel saved [\"watchkeeper-127.0.0.1-2026-10-23-142541.html\", \"watchkeeper-127.0.0.1-2026-10-23-142541.json\"]; JSON parses: true, lists 14 of 14 tracker addresses (missing []) and 1 other sites, as the panel counts 1; HTML 5194 bytes, inert: true"
+    },
+    {
       "name": "layout after resize",
       "pass": true,
       "detail": "content 900x600; toolbar 900x48 at (0,0), page 580x552 at (0,48), panel 320x552 at (580,48)"
@@ -105,6 +110,11 @@
       "detail": "skipped: no IPv6 loopback on this machine"
     },
     {
+      "name": "hostile page's report stays inert",
+      "pass": true,
+      "detail": "page's save refused: true; panel saved [\"watchkeeper-127.0.0.1-2026-10-23-142552.html\", \"watchkeeper-127.0.0.1-2026-10-23-142552.json\"]; JSON parses: true, lists 21 of 21 tracker addresses (missing []) and 2000 other sites, as the panel counts 2000; HTML 816399 bytes, inert: true"
+    },
+    {
       "name": "floods are reported, not hidden",
       "pass": true,
       "detail": "73827 events from the flood reported as not counted; 9004 distinct addresses kept"
@@ -112,7 +122,7 @@
     {
       "name": "Back cannot be trapped by the page",
       "pass": true,
-      "detail": "on localhost at /away, Back went to http://127.0.0.1:41085/hostile; the page's history.back called: false"
+      "detail": "on localhost at /away, Back went to http://127.0.0.1:35021/hostile; the page's history.back called: false"
     },
     {
       "name": "a page brought back by Back is watched as its own site",
@@ -132,7 +142,7 @@
   ],
   "summary": {
     "site": "127.0.0.1",
-    "page_url": "http://127.0.0.1:41085/hostile",
+    "page_url": "http://127.0.0.1:35021/hostile",
     "third_party_sites": [
       "localhost"
     ],
@@ -140,7 +150,7 @@
     "third_party_addresses": 6,
     "first_party_cookies": 303,
     "third_party_cookies": 0,
-    "storage_writes": 5,
+    "storage_writes": 6,
     "third_party_storage_writes": 0,
     "fingerprinting": [],
     "fingerprinting_by": [],
@@ -154,22 +164,17 @@
     {
       "path": "/tracker.js",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=script sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=script sec-fetch-mode=no-cors"
     },
     {
       "path": "/style.css",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=style sec-fetch-mode=no-cors"
-    },
-    {
-      "path": "/pixel.gif",
-      "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=image sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=style sec-fetch-mode=no-cors"
     },
     {
       "path": "/collect",
       "query": "id=1",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/ws",
@@ -179,17 +184,22 @@
     {
       "path": "/xhr",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=cors"
+    },
+    {
+      "path": "/pixel.gif",
+      "query": "",
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=image sec-fetch-mode=no-cors"
     },
     {
       "path": "/beacon",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/fp",
       "query": "canvas=1&webgl=1&audio=1&idb=1",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/ws-sub",
@@ -199,7 +209,7 @@
     {
       "path": "/wrap",
       "query": "sub=1&nonew=threw&aud=1&fetchname=fetch",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/tt-first",
@@ -209,7 +219,12 @@
     {
       "path": "/frame.html",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=iframe sec-fetch-mode=navigate"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=iframe sec-fetch-mode=navigate"
+    },
+    {
+      "path": "/frame-call",
+      "query": "",
+      "how": "referer=http://localhost:34577/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/worker-call",
@@ -217,24 +232,24 @@
       "how": "sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
-      "path": "/frame-call",
-      "query": "",
-      "how": "referer=http://localhost:42611/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
-    },
-    {
       "path": "/late",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/h-tracker.js",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=script sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=script sec-fetch-mode=no-cors"
+    },
+    {
+      "path": "/h-pixel.gif",
+      "query": "",
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=image sec-fetch-mode=no-cors"
     },
     {
       "path": "/h-collect",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/h-ws",
@@ -244,17 +259,12 @@
     {
       "path": "/h-beacon",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
-    },
-    {
-      "path": "/h-pixel.gif",
-      "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=image sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/h-done",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     },
     {
       "path": "/away",
@@ -264,7 +274,7 @@
     {
       "path": "/after-back-restored",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=no-cors"
     }
   ],
   "site_hits": [
@@ -276,7 +286,7 @@
     {
       "path": "/ipc",
       "query": "denied=1",
-      "how": "referer=http://127.0.0.1:41085/ sec-fetch-dest=empty sec-fetch-mode=cors"
+      "how": "referer=http://127.0.0.1:35021/ sec-fetch-dest=empty sec-fetch-mode=cors"
     },
     {
       "path": "/hostile",
@@ -286,35 +296,35 @@
     {
       "path": "/h-probe",
       "query": "found=1&drained=0",
-      "how": "referer=http://127.0.0.1:41085/hostile sec-fetch-dest=empty sec-fetch-mode=cors"
+      "how": "referer=http://127.0.0.1:35021/hostile sec-fetch-dest=empty sec-fetch-mode=cors"
     },
     {
       "path": "/frame-same",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/hostile sec-fetch-dest=iframe sec-fetch-mode=navigate"
+      "how": "referer=http://127.0.0.1:35021/hostile sec-fetch-dest=iframe sec-fetch-mode=navigate"
     },
     {
       "path": "/same-call",
       "query": "",
-      "how": "referer=http://127.0.0.1:41085/frame-same sec-fetch-dest=empty sec-fetch-mode=cors"
+      "how": "referer=http://127.0.0.1:35021/frame-same sec-fetch-dest=empty sec-fetch-mode=cors"
     },
     {
       "path": "/h-forged",
       "query": "key=1&n=4207",
-      "how": "referer=http://127.0.0.1:41085/hostile sec-fetch-dest=empty sec-fetch-mode=cors"
+      "how": "referer=http://127.0.0.1:35021/hostile sec-fetch-dest=empty sec-fetch-mode=cors"
     }
   ],
   "detected_requests": [
-    "http://127.0.0.1:41085/frame-same",
-    "http://127.0.0.1:41085/h-forged",
-    "http://127.0.0.1:41085/h-probe",
-    "http://127.0.0.1:41085/same-call",
-    "http://localhost:42611/after-back-restored",
-    "http://localhost:42611/h-beacon",
-    "http://localhost:42611/h-collect",
-    "http://localhost:42611/h-done",
-    "http://localhost:42611/h-pixel.gif",
-    "http://localhost:42611/h-tracker.js"
+    "http://127.0.0.1:35021/frame-same",
+    "http://127.0.0.1:35021/h-forged",
+    "http://127.0.0.1:35021/h-probe",
+    "http://127.0.0.1:35021/same-call",
+    "http://localhost:34577/after-back-restored",
+    "http://localhost:34577/h-beacon",
+    "http://localhost:34577/h-collect",
+    "http://localhost:34577/h-done",
+    "http://localhost:34577/h-pixel.gif",
+    "http://localhost:34577/h-tracker.js"
   ],
   "cookies": [
     {
@@ -1833,5 +1843,5 @@
       "http_only": false
     }
   ],
-  "seconds": 22.673463413
+  "seconds": 28.039572914
 }

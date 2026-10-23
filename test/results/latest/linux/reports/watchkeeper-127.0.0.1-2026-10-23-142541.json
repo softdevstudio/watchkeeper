@@ -1,0 +1,245 @@
+{
+  "format": "watchkeeper-report",
+  "format_version": 1,
+  "watchkeeper": "0.3.0",
+  "system": "linux x86_64",
+  "saved": "2026-10-23 14:25:41 UTC",
+  "site": "127.0.0.1",
+  "page_address": "http://127.0.0.1:35021/",
+  "summary": {
+    "site": "127.0.0.1",
+    "page_url": "http://127.0.0.1:35021/",
+    "third_party_sites": [
+      "localhost"
+    ],
+    "addresses": 16,
+    "third_party_addresses": 14,
+    "first_party_cookies": 3,
+    "third_party_cookies": 0,
+    "storage_writes": 6,
+    "third_party_storage_writes": 2,
+    "fingerprinting": [
+      "audio",
+      "canvas",
+      "webgl"
+    ],
+    "fingerprinting_by": [
+      {
+        "api": "audio",
+        "by": "localhost"
+      },
+      {
+        "api": "canvas",
+        "by": "localhost"
+      },
+      {
+        "api": "webgl",
+        "by": "localhost"
+      }
+    ],
+    "confirmed_sites": [
+      "localhost"
+    ],
+    "workers": 1,
+    "dropped": 0
+  },
+  "other_sites": [
+    {
+      "site": "localhost",
+      "confirmed": true,
+      "addresses": [
+        {
+          "address": "http://localhost:34577/beacon",
+          "kinds": [
+            "beacon",
+            "other"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/collect",
+          "kinds": [
+            "fetch"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/fp",
+          "kinds": [
+            "fetch"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/frame-call",
+          "kinds": [
+            "fetch"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/frame.html",
+          "kinds": [
+            "iframe"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/late",
+          "kinds": [
+            "fetch"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/pixel.gif",
+          "kinds": [
+            "img"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/style.css",
+          "kinds": [
+            "link"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/tracker.js",
+          "kinds": [
+            "script"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/wrap",
+          "kinds": [
+            "fetch"
+          ]
+        },
+        {
+          "address": "http://localhost:34577/xhr",
+          "kinds": [
+            "xhr",
+            "xmlhttprequest"
+          ]
+        },
+        {
+          "address": "ws://localhost:34577/tt-first",
+          "kinds": [
+            "websocket"
+          ]
+        },
+        {
+          "address": "ws://localhost:34577/ws",
+          "kinds": [
+            "websocket"
+          ]
+        },
+        {
+          "address": "ws://localhost:34577/ws-sub",
+          "kinds": [
+            "websocket"
+          ]
+        }
+      ]
+    }
+  ],
+  "own_addresses": [
+    {
+      "address": "http://127.0.0.1:35021/(worker%20from%20a%20blob)",
+      "kinds": [
+        "worker"
+      ]
+    },
+    {
+      "address": "http://127.0.0.1:35021/ipc",
+      "kinds": [
+        "fetch"
+      ]
+    }
+  ],
+  "unlisted_addresses": 0,
+  "cookies": [
+    {
+      "name": "wk_session",
+      "domain": "127.0.0.1",
+      "http_only": true,
+      "belongs_to": "this site"
+    },
+    {
+      "name": "wk_page",
+      "domain": "127.0.0.1",
+      "http_only": false,
+      "belongs_to": "this site"
+    },
+    {
+      "name": "wk_js",
+      "domain": "127.0.0.1",
+      "http_only": false,
+      "belongs_to": "this site"
+    }
+  ],
+  "earlier_cookies": 0,
+  "script_cookies": [
+    {
+      "site": "127.0.0.1",
+      "name": "wk_js"
+    },
+    {
+      "site": "127.0.0.1",
+      "name": "wk_page"
+    }
+  ],
+  "storage_writes": [
+    {
+      "site": "127.0.0.1",
+      "kind": "indexedDB",
+      "key": "wk_db"
+    },
+    {
+      "site": "127.0.0.1",
+      "kind": "localStorage",
+      "key": "direct_key"
+    },
+    {
+      "site": "127.0.0.1",
+      "kind": "localStorage",
+      "key": "wk_ls"
+    },
+    {
+      "site": "127.0.0.1",
+      "kind": "sessionStorage",
+      "key": "wk_ss"
+    },
+    {
+      "site": "localhost",
+      "kind": "localStorage",
+      "key": "tp_direct"
+    },
+    {
+      "site": "localhost",
+      "kind": "localStorage",
+      "key": "tp_set"
+    }
+  ],
+  "fingerprinting": [
+    {
+      "api": "audio",
+      "by": "localhost"
+    },
+    {
+      "api": "canvas",
+      "by": "localhost"
+    },
+    {
+      "api": "webgl",
+      "by": "localhost"
+    }
+  ],
+  "workers": [
+    "http://127.0.0.1:35021/(worker%20from%20a%20blob)"
+  ],
+  "dropped": 0,
+  "last_visit": null,
+  "cannot_see": [
+    "Requests made from inside workers and service workers are not seen; a worker starting is.",
+    "A beacon sent while leaving a page can be missed.",
+    "An engine can hold back some details of frames from other sites.",
+    "A page can add false events about itself, and a flood of activity can push some addresses out; the dropped count says how many.",
+    "The site named for a fingerprinting read is the nearest script on the call stack, not proof that script chose to read.",
+    "Each engine blocks some third-party cookies on its own, so counts differ between Windows, macOS and Linux."
+  ]
+}

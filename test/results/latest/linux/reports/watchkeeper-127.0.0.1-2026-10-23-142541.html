@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watchkeeper report for 127.0.0.1</title>
+<style>
+body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: #1d1f23; background: #fff; }
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { margin: 0 0 6px; font-size: 28px; word-break: break-all; }
+h2 { margin: 28px 0 8px; font-size: 18px; }
+.kicker { margin: 0; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: #6b7078; }
+.meta, .muted { color: #6b7078; font-size: 13px; word-break: break-all; }
+.counts { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+.counts div { border: 1px solid #e3e5e8; border-radius: 8px; padding: 8px 12px; min-width: 120px; }
+.counts b { display: block; font-size: 24px; color: #b4321f; }
+.warn { color: #b4321f; }
+ul { padding-left: 20px; margin: 6px 0; }
+li { word-break: break-all; }
+details { border-bottom: 1px solid #e3e5e8; padding: 6px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; border-bottom: 1px solid #e3e5e8; padding: 4px 6px; word-break: break-all; }
+@media (prefers-color-scheme: dark) {
+  body { color: #e6e7e9; background: #17181b; }
+  .counts div, details, th, td { border-color: #33363c; }
+  .counts b, .warn { color: #ff8a73; }
+}
+</style>
+</head>
+<body>
+<main>
+<p class="kicker">Watchkeeper report</p>
+<h1>127.0.0.1</h1>
+<p class="meta">Page http://127.0.0.1:35021/<br>Saved 2026-10-23 14:25:41 UTC by Watchkeeper 0.3.0 on linux x86_64</p>
+<section class="counts">
+<div><b>1</b>other sites told about the visit</div>
+<div><b>16</b>addresses requested</div>
+<div><b>3</b>cookies for this site</div>
+<div><b>0</b>cookies for other sites</div>
+<div><b>6</b>storage writes</div>
+<div><b>3</b>kinds of fingerprinting read</div>
+</section>
+<h2>Other sites told about the visit</h2>
+<details><summary><b>localhost</b> <span class="muted">14 addresses</span></summary>
+<ul>
+<li>http://localhost:34577/beacon <span class="muted">beacon, other</span></li>
+<li>http://localhost:34577/collect <span class="muted">fetch</span></li>
+<li>http://localhost:34577/fp <span class="muted">fetch</span></li>
+<li>http://localhost:34577/frame-call <span class="muted">fetch</span></li>
+<li>http://localhost:34577/frame.html <span class="muted">iframe</span></li>
+<li>http://localhost:34577/late <span class="muted">fetch</span></li>
+<li>http://localhost:34577/pixel.gif <span class="muted">img</span></li>
+<li>http://localhost:34577/style.css <span class="muted">link</span></li>
+<li>http://localhost:34577/tracker.js <span class="muted">script</span></li>
+<li>http://localhost:34577/wrap <span class="muted">fetch</span></li>
+<li>http://localhost:34577/xhr <span class="muted">xhr, xmlhttprequest</span></li>
+<li>ws://localhost:34577/tt-first <span class="muted">websocket</span></li>
+<li>ws://localhost:34577/ws <span class="muted">websocket</span></li>
+<li>ws://localhost:34577/ws-sub <span class="muted">websocket</span></li>
+</ul></details>
+<h2>Fingerprinting reads</h2>
+<ul>
+<li>audio by localhost</li>
+<li>canvas by localhost</li>
+<li>webgl by localhost</li>
+</ul>
+<h2>Cookies in the session's store</h2>
+<table><tr><th>Name</th><th>Domain</th><th>Belongs to</th><th>Hidden from scripts</th></tr>
+<tr><td>wk_session</td><td>127.0.0.1</td><td>this site</td><td>yes</td></tr>
+<tr><td>wk_page</td><td>127.0.0.1</td><td>this site</td><td>no</td></tr>
+<tr><td>wk_js</td><td>127.0.0.1</td><td>this site</td><td>no</td></tr>
+</table>
+<h2>Cookies written by scripts</h2>
+<ul>
+<li>wk_js (by 127.0.0.1)</li>
+<li>wk_page (by 127.0.0.1)</li>
+</ul>
+<h2>Storage writes</h2>
+<ul>
+<li>wk_db in indexedDB (by 127.0.0.1)</li>
+<li>direct_key in localStorage (by 127.0.0.1)</li>
+<li>wk_ls in localStorage (by 127.0.0.1)</li>
+<li>wk_ss in sessionStorage (by 127.0.0.1)</li>
+<li>tp_direct in localStorage (by localhost)</li>
+<li>tp_set in localStorage (by localhost)</li>
+</ul>
+<h2>Workers started</h2>
+<ul>
+<li>http://127.0.0.1:35021/(worker%20from%20a%20blob)</li>
+</ul>
+<h2>Addresses on the site itself</h2>
+<ul>
+<li>http://127.0.0.1:35021/(worker%20from%20a%20blob) <span class="muted">worker</span></li>
+<li>http://127.0.0.1:35021/ipc <span class="muted">fetch</span></li>
+</ul>
+<h2>What Watchkeeper cannot see</h2>
+<ul>
+<li>Requests made from inside workers and service workers are not seen; a worker starting is.</li>
+<li>A beacon sent while leaving a page can be missed.</li>
+<li>An engine can hold back some details of frames from other sites.</li>
+<li>A page can add false events about itself, and a flood of activity can push some addresses out; the dropped count says how many.</li>
+<li>The site named for a fingerprinting read is the nearest script on the call stack, not proof that script chose to read.</li>
+<li>Each engine blocks some third-party cookies on its own, so counts differ between Windows, macOS and Linux.</li>
+</ul>
+<p class="muted">Addresses are kept without query strings. Names only, never cookie or storage values.</p>
+</main>
+</body>
+</html>

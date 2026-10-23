@@ -81,6 +81,11 @@ set -e
 grep -E '^(PASS|FAIL|selftest)' "$raw" | tee -a "$log" || true
 echo "selftest exit code: $status" | tee -a "$log"
 grep -E '^(PASS|FAIL|selftest)' "$raw" > "$out/selftest.txt" || true
+# Keep the ordinary page's report as a sample; the hostile page's runs to
+# megabytes and the self-test has already checked it.
+if [ -d "$out/reports" ]; then
+  ls "$out/reports" | sort | tail -n +3 | while read -r f; do rm -f "$out/reports/$f"; done
+fi
 if [ "$status" -eq 0 ]; then
   annotate notice "selftest passed" "$out/selftest.txt"
 else

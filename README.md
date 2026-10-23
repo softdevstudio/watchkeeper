@@ -8,7 +8,7 @@ Watchkeeper uses the web engine your system already has: WebView2 on Windows, WK
 
 ## Status
 
-Version 0.2. Installers for Windows, macOS and Linux are on the [releases page](https://github.com/softdevstudio/watchkeeper/releases/latest). Every build passes an end-to-end self-test on its own system before it is published.
+Version 0.3. Installers for Windows, macOS and Linux are on the [releases page](https://github.com/softdevstudio/watchkeeper/releases/latest). Every build passes an end-to-end self-test on its own system before it is published.
 
 The builds are not signed yet. On Windows, SmartScreen warns you: choose More info, then Run anyway. On macOS, right-click Watchkeeper and choose Open the first time. On Linux, make the AppImage executable and run it, or install the .deb.
 
