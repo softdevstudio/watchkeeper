@@ -69,6 +69,8 @@ enum Role {
 struct Server {
     port: u16,
     hits: Arc<Mutex<Vec<Hit>>>,
+    /// Also listening on [::1], which is a site of its own.
+    v6: bool,
 }
 
 impl Server {
@@ -78,8 +80,10 @@ impl Server {
         let hits = Arc::new(Mutex::new(Vec::new()));
         let mut listeners = vec![v4];
         // "localhost" may resolve to ::1 first; listen there too if we can.
-        if let Ok(v6) = TcpListener::bind(("::1", port)) {
-            listeners.push(v6);
+        let mut v6 = false;
+        if let Ok(l) = TcpListener::bind(("::1", port)) {
+            listeners.push(l);
+            v6 = true;
         }
         for listener in listeners {
             let hits = hits.clone();
@@ -94,7 +98,7 @@ impl Server {
                 }
             });
         }
-        Ok(Server { port, hits })
+        Ok(Server { port, hits, v6 })
     }
 
     fn hits(&self) -> Vec<Hit> {
@@ -207,6 +211,16 @@ fn respond(role: Role, path: &str, other: &str) -> Response {
             )
         }
         (Role::Site, "/hostile") => html(hostile_page(other)),
+        (Role::Site, "/frame-same") => html(
+            "<!doctype html><title>same-site frame</title><script>fetch('/same-call');</script>"
+                .into(),
+        ),
+        (Role::Tracker, "/away") => html(
+            "<!doctype html><title>away</title><h1>Another site</h1><script>\
+             history.back = function () { new Image().src = '/trap'; };\
+             history.go = function () { new Image().src = '/trap'; };</script>"
+                .into(),
+        ),
         (Role::Tracker, "/tracker.js") => (
             ok,
             "text/javascript",
@@ -300,17 +314,33 @@ const TRACKER_JS: &str = r#"(function () {
     var blob = new Blob(["fetch('" + T + "/worker-call', { mode: 'no-cors' });"], { type: 'text/javascript' });
     new Worker(URL.createObjectURL(blob));
   } catch (e) { }
+  // Read-twice trick: an address that answers differently the second
+  // time. The tracker server sees whichever one the engine used; that one
+  // must be in the report.
+  try {
+    var n = 0;
+    new WebSocket({ toString: function () { return n++ === 0 ? WS + '/tt-first' : WS + '/tt-second'; } });
+  } catch (e) { }
   setTimeout(function () { fetch(T + '/late', { mode: 'no-cors' }); }, 1500);
 })();
 "#;
 
 fn hostile_page(tracker: &str) -> String {
+    // A second address for the tracker server that is a different site:
+    // [::1] when the server could listen there.
+    let v6 = tracker.replace("localhost", "[::1]");
     format!(
         r#"<!doctype html>
 <html><head><meta charset="utf-8"><title>Hostile page</title></head>
 <body><h1>Hostile page</h1>
 <script>
 (function () {{
+  // Coming back here with Back must still be visible.
+  window.addEventListener('pageshow', function (e) {{
+    if (sessionStorage.getItem('wk_v')) fetch('{tracker}/after-back-' + (e.persisted ? 'restored' : 'reloaded'), {{ mode: 'no-cors' }});
+    else sessionStorage.setItem('wk_v', '1');
+  }});
+
   // Look for the collector and try to drain it without the secret.
   var found = 0, drained = 0;
   Object.getOwnPropertyNames(window).forEach(function (n) {{
@@ -318,42 +348,65 @@ fn hostile_page(tracker: &str) -> String {
     found++;
     var c = window[n];
     [undefined, '', 'guess', n.slice(5)].forEach(function (s) {{
-      try {{ var r = c && c.d && c.d(s, '', 0); if (r) drained++; }} catch (e) {{ }}
-      try {{ var r2 = c && c.d && c.d(s, 'doc', 999999); if (r2) drained++; }} catch (e) {{ }}
+      [['', 0, false], ['doc', 999999, true]].forEach(function (a) {{
+        try {{ if (c && c.d && c.d(s, a[0], a[1], a[2])) drained++; }} catch (e) {{ }}
+      }});
     }});
   }});
   fetch('/h-probe?found=' + found + '&drained=' + drained);
-  var t0 = Date.now();
 
-  // Trap the Back button.
-  history.back = function () {{ new Image().src = '/trap'; }};
-  history.go = function () {{ new Image().src = '/trap'; }};
+  // Learn the frame key from a same-site frame's messages.
+  var key = null;
+  window.addEventListener('message', function (m) {{ try {{ if (m.data && m.data.wk) key = m.data.wk; }} catch (e) {{ }} }});
+  var f = document.createElement('iframe');
+  f.src = '/frame-same';
+  document.body.appendChild(f);
 
-  // Floods. Real engines write cookies slowly (WebKitGTK takes tens of
-  // milliseconds each once a few hundred exist), so the cookie flood is
-  // small; the address flood is large enough to overflow the buffer.
-  for (var i = 0; i < 300; i++) document.cookie = 'c' + i + '=1';
-  for (var j = 0; j < 8000; j++) {{ var x = new XMLHttpRequest(); x.open('GET', '/flood' + j); }}
-  fetch('/h-flooded?ms=' + (Date.now() - t0));
+  setTimeout(function () {{
+    // Forged messages: broken text, hostile objects, oversized and
+    // made-up "confirmed" hosts.
+    var forged = 0;
+    if (key) {{
+      // Messages are copied between frames, so they can hold any data but
+      // no functions: wrong types are the worst a frame can send.
+      var msgs = [{{ wk: key, ev: '{{', u: '1' }}, {{ wk: key, k: 'res', a: '{{"', b: '"]}}' }},
+                  {{ wk: key, k: 'res', a: 12345, b: {{ x: 1 }} }}, {{ wk: key, k: 'store', a: 'localStorage', b: ['a', 'b'] }},
+                  {{ wk: key, k: '__proto__', a: 'x' }}, {{ wk: key, k: 'fp', a: 'everything' }}, {{ wk: key, k: ['res'], a: null }}];
+      for (var i = 0; i < 1200; i++) msgs.push({{ wk: key, k: 'cookie', a: 'x'.repeat(4000) + i }});
+      for (var j = 0; j < 3000; j++) msgs.push({{ wk: key, k: 'res', a: 'https://forged' + j + '.example/p', b: 'img', c: '1' }});
+      msgs.forEach(function (m) {{ try {{ window.postMessage(m, '*'); forged++; }} catch (e) {{ }} }});
+    }}
+    fetch('/h-forged?key=' + (key ? 1 : 0) + '&n=' + forged);
 
-  // Replace everything the detector might lean on.
-  JSON.stringify = function () {{ return '[]'; }};
-  JSON.parse = function () {{ return []; }};
-  Object.prototype.toJSON = function () {{ return 1; }};
-  window.URL = function () {{ throw new Error('no'); }};
-  Array.prototype.push = function () {{ return 0; }};
-  Object.defineProperty(Array.prototype, '0', {{ set: function () {{ }}, configurable: true }});
-  String.prototype.indexOf = function () {{ return -1; }};
-  String.prototype.slice = function () {{ return ''; }};
-  String.prototype.charCodeAt = function () {{ return 0; }};
-  Reflect.apply = function () {{ }};
-  Reflect.construct = function () {{ return {{}}; }};
-  Object.prototype.apply = function () {{ }};
-  Object.prototype.construct = function () {{ }};
+    // Floods. Real engines write cookies slowly (WebKitGTK takes tens of
+    // milliseconds each once a few hundred exist), so the cookie flood is
+    // small; the address flood is large enough to overflow the buffer.
+    for (var c = 0; c < 300; c++) document.cookie = 'c' + c + '=1';
+    for (var k = 0; k < 8000; k++) {{ var x = new XMLHttpRequest(); x.open('GET', '/flood' + k); }}
+    // Made-up sites, named in calls that go nowhere.
+    for (var h = 0; h < 2100; h++) {{ var y = new XMLHttpRequest(); y.open('GET', 'https://junk' + h + '.example/x'); }}
 
-  var s = document.createElement('script');
-  s.src = '{tracker}/h-tracker.js';
-  document.head.appendChild(s);
+    // Replace everything the detector might lean on.
+    JSON.stringify = function () {{ return '[]'; }};
+    JSON.parse = function () {{ return []; }};
+    Object.prototype.toJSON = function () {{ return 1; }};
+    window.URL = function () {{ throw new Error('no'); }};
+    Array.prototype.push = function () {{ return 0; }};
+    Object.defineProperty(Array.prototype, '0', {{ set: function () {{ }}, configurable: true }});
+    String.prototype.indexOf = function () {{ return -1; }};
+    String.prototype.slice = function () {{ return ''; }};
+    String.prototype.charCodeAt = function () {{ return 0; }};
+    Reflect.apply = function () {{ }};
+    Reflect.construct = function () {{ return {{}}; }};
+    Object.prototype.apply = function () {{ }};
+    Object.prototype.construct = function () {{ }};
+
+    // A real new site after all that.
+    new Image().src = '{v6}/sf-pixel.gif';
+    var s = document.createElement('script');
+    s.src = '{tracker}/h-tracker.js';
+    document.head.appendChild(s);
+  }}, 800);
 }})();
 </script>
 </body></html>"#
@@ -841,6 +894,31 @@ fn run_checks(
         format!("page reported {probe:?} (found = collectors it could name)"),
     ));
 
+    let forged = site.query("/h-forged");
+    checks.push(check(
+        "forged frame messages cannot stall or corrupt collection",
+        flag(&forged, "key=1") && done && missing.is_empty(),
+        format!(
+            "page learned the frame key and sent forged messages ({forged:?}); collection carried on: {}",
+            missing.is_empty()
+        ),
+    ));
+
+    let v6_hit = tracker.has("/sf-pixel.gif");
+    let v6_listed = r.other_sites.iter().any(|s| s == "[::1]");
+    checks.push(check(
+        "made-up sites cannot hide a real new one",
+        !tracker.v6 || (v6_hit && v6_listed),
+        if !tracker.v6 {
+            "skipped: no IPv6 loopback on this machine".to_string()
+        } else {
+            format!(
+                "after 2,100 made-up sites and 3,000 forged ones, [::1] contacted {v6_hit}, listed {v6_listed}; {} sites listed",
+                r.other_sites.len()
+            )
+        },
+    ));
+
     let dropped = r.dropped.saturating_sub(dropped_before);
     checks.push(check(
         "floods are reported, not hidden",
@@ -851,30 +929,68 @@ fn run_checks(
         ),
     ));
 
-    // ---- 3. Back ignores the page's history.back -----------------------------
-    let before = shared.address.lock().map(|a| a.clone()).unwrap_or_default();
+    // ---- 3. Back to a restored page, past a trap ---------------------------------
+    // Go to another site whose page replaced history.back, then press Back.
+    let tracker_url = format!("http://localhost:{}", tracker.port);
+    if let Some(v) = app.get_webview(PAGE) {
+        let _ = v.navigate(Url::parse(&format!("{tracker_url}/away")).expect("valid"));
+    }
+    let away = wait_until(Instant::now() + Duration::from_secs(15), || {
+        shared
+            .address
+            .lock()
+            .map(|a| a.ends_with("/away"))
+            .unwrap_or(false)
+    });
+    std::thread::sleep(Duration::from_millis(1500));
+    let away_site = report(shared).site;
     let back = match app.get_webview(PAGE) {
         Some(v) => history::step(&v, history::Step::Back),
         None => Err("no page".into()),
     };
-    let returned = wait_until(Instant::now() + Duration::from_secs(10), || {
+    let returned = wait_until(Instant::now() + Duration::from_secs(15), || {
         shared
             .address
             .lock()
-            .map(|a| a.trim_end_matches('/') == site_url)
+            .map(|a| a.ends_with("/hostile"))
             .unwrap_or(false)
     });
-    std::thread::sleep(Duration::from_millis(500));
-    let trapped = site.has("/trap");
+    let came_back = wait_until(Instant::now() + Duration::from_secs(20), || {
+        tracker
+            .hits()
+            .iter()
+            .any(|h| h.path.starts_with("/after-back-"))
+    });
+    std::thread::sleep(Duration::from_millis(2500));
+    let trapped = tracker.has("/trap");
     let after = shared.address.lock().map(|a| a.clone()).unwrap_or_default();
     checks.push(check(
         "Back cannot be trapped by the page",
-        back.is_ok() && returned && !trapped,
+        away && back.is_ok() && returned && !trapped,
         format!(
-            "from {before} back to {after}; page's history.back called: {trapped}{}",
-            back.err()
+            "on {away_site} at /away, Back went to {after}; the page's history.back called: {trapped}{}",
+            back.as_ref()
+                .err()
                 .map(|e| format!("; error {e}"))
                 .unwrap_or_default()
+        ),
+    ));
+
+    let r = report(shared);
+    let seen = seen_tracker_paths(&r, tracker);
+    let back_paths: Vec<String> = tracker
+        .hits()
+        .iter()
+        .filter(|h| h.path.starts_with("/after-back-"))
+        .map(|h| h.path.clone())
+        .collect();
+    let all_seen = !back_paths.is_empty() && back_paths.iter().all(|p| seen.contains(p));
+    checks.push(check(
+        "a page brought back by Back is watched as its own site",
+        away_site == "localhost" && came_back && r.site == "127.0.0.1" && all_seen,
+        format!(
+            "report site went localhost ({away_site}) then {}; after Back the page called {back_paths:?}, all in the report: {all_seen}",
+            r.site
         ),
     ));
 

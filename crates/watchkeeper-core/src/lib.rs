@@ -27,6 +27,10 @@ const DETECT_TEMPLATE: &str = include_str!("../assets/detect.js");
 
 /// Distinct addresses kept per site.
 pub const MAX_ADDRESSES: usize = 5_000;
+/// Every host keeps its first this many addresses even past
+/// MAX_ADDRESSES, so one host's flood cannot push another host's addresses
+/// out. The total stays under 4 × MAX_ADDRESSES.
+pub const PER_HOST_RESERVE: usize = 50;
 /// Distinct other sites kept per site. Kept separately from addresses, so
 /// a flood of addresses cannot hide a new site.
 pub const MAX_SITES: usize = 2_000;
@@ -80,13 +84,14 @@ pub fn detection_script(keys: &Keys) -> String {
 }
 
 /// Script that collects events. It returns a JSON string, or null when the
-/// detection script is not on the page.
-pub fn drain_script(keys: &Keys, doc: &str, ack: u64) -> String {
+/// detection script is not on the page. With `skip`, the page gives up on
+/// the events it holds (counting them as dropped) before answering.
+pub fn drain_script(keys: &Keys, doc: &str, ack: u64, skip: bool) -> String {
     // The document id comes back from the page, so it is passed as a JSON
     // string literal rather than pasted in.
     let doc = serde_json::to_string(doc).unwrap_or_else(|_| "\"\"".into());
     format!(
-        "(function(){{try{{var c=window['__wk_{t}'];return c&&c.d?c.d('{s}',{doc},{ack}):null;}}catch(e){{return null;}}}})()",
+        "(function(){{try{{var c=window['__wk_{t}'];return c&&c.d?c.d('{s}',{doc},{ack},{skip}):null;}}catch(e){{return null;}}}})()",
         t = keys.token,
         s = keys.secret,
     )
@@ -108,6 +113,10 @@ pub enum Event {
         /// Origin of the frame that made it.
         #[serde(default)]
         o: String,
+        /// "1" when the engine's own resource list showed the request, so
+        /// the address was really contacted, not just named in a call.
+        #[serde(default)]
+        c: String,
     },
     /// A cookie written by script.
     #[serde(rename = "cookie")]
@@ -189,6 +198,14 @@ pub struct SiteReport {
     pub requests: BTreeMap<String, BTreeSet<String>>,
     /// Other sites contacted.
     pub other_sites: BTreeSet<String>,
+    /// Sites let in past MAX_SITES because the engine confirmed the
+    /// request. A page can name any number of made-up sites in calls that
+    /// go nowhere; it cannot fake the engine's own list.
+    #[serde(skip)]
+    confirmed_extra: usize,
+    /// Addresses kept per host.
+    #[serde(skip)]
+    per_host: std::collections::HashMap<String, usize>,
     /// Cookie names written by script, as (site of the frame, name).
     pub script_cookies: BTreeSet<(String, String)>,
     /// Storage writes as (site of the frame, kind, key).
@@ -250,12 +267,15 @@ impl SiteReport {
     /// Adds one event.
     pub fn add_event(&mut self, ev: Event) {
         match ev {
-            Event::Request { u, t, .. } => {
+            Event::Request { u, t, c, .. } => {
                 let Some(site) = site_of_url(&u) else {
                     return;
                 };
                 if site != self.site && !self.other_sites.contains(&site) {
                     if self.other_sites.len() < MAX_SITES {
+                        self.other_sites.insert(site);
+                    } else if c == "1" && self.confirmed_extra < MAX_SITES {
+                        self.confirmed_extra += 1;
                         self.other_sites.insert(site);
                     } else {
                         self.dropped += 1;
@@ -271,10 +291,20 @@ impl SiteReport {
                     if kinds.len() < 16 {
                         kinds.insert(kind);
                     }
-                } else if self.requests.len() < MAX_ADDRESSES {
-                    self.requests.insert(u, BTreeSet::from([kind]));
                 } else {
-                    self.dropped += 1;
+                    let host = Url::parse(&u)
+                        .ok()
+                        .and_then(|x| x.host_str().map(|h| h.to_string()))
+                        .unwrap_or_default();
+                    let n = self.per_host.get(&host).copied().unwrap_or(0);
+                    let room = self.requests.len() < MAX_ADDRESSES
+                        || (n < PER_HOST_RESERVE && self.requests.len() < MAX_ADDRESSES * 4);
+                    if room && (self.per_host.len() < MAX_SITES * 2 || n > 0) {
+                        *self.per_host.entry(host).or_insert(0) += 1;
+                        self.requests.insert(u, BTreeSet::from([kind]));
+                    } else {
+                        self.dropped += 1;
+                    }
                 }
             }
             Event::Cookie { n, o } => {
@@ -392,17 +422,31 @@ pub struct Session {
     acked: u64,
     js_dropped: u64,
     retired: VecDeque<String>,
+    failures: u32,
 }
 
 impl Session {
-    /// The document id and acknowledgement to send with the next drain.
-    pub fn drain_args(&self) -> (String, u64) {
-        (self.doc.clone(), self.acked)
+    /// The document id, acknowledgement and skip flag to send with the
+    /// next drain. After two answers in a row that could not be read, the
+    /// page is told to give up on what it holds, so one bad answer cannot
+    /// stop collection.
+    pub fn drain_args(&self) -> (String, u64, bool) {
+        (self.doc.clone(), self.acked, self.failures >= 2)
     }
 
     /// Adds the answer to a [`drain_script`] call. Some engines hand the
     /// result back JSON-encoded a second time; both forms are accepted.
     pub fn apply(&mut self, answer: &str) -> Result<Applied, String> {
+        let result = self.apply_inner(answer);
+        if result.is_err() {
+            self.failures = self.failures.saturating_add(1);
+        } else {
+            self.failures = 0;
+        }
+        result
+    }
+
+    fn apply_inner(&mut self, answer: &str) -> Result<Applied, String> {
         if answer.len() > MAX_BATCH_BYTES {
             return Err("batch too large".into());
         }
@@ -484,7 +528,7 @@ mod tests {
         let s = detection_script(&k);
         assert!(!s.contains("__WK_"));
         assert!(s.contains("'__wk_tok12345'") && s.contains("'sec12345'"));
-        let d = drain_script(&k, "doc\"x", 7);
-        assert!(d.contains("\"doc\\\"x\"") && d.contains(",7)"));
+        let d = drain_script(&k, "doc\"x", 7, false);
+        assert!(d.contains("\"doc\\\"x\"") && d.contains(",7,false)"));
     }
 }

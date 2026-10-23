@@ -49,10 +49,10 @@ fn acknowledged_events_are_not_counted_twice() {
     let a = req("https://a.tracker.net/1", "img");
     let b = req("https://b.other.org/2", "img");
     s.apply(&batch("d1", PAGE, 1, 0, &[&a])).unwrap();
-    assert_eq!(s.drain_args(), ("d1".to_string(), 1));
+    assert_eq!(s.drain_args(), ("d1".to_string(), 1, false));
     // The answer to the next call was lost; the page sends event 1 again.
     s.apply(&batch("d1", PAGE, 1, 0, &[&a, &b])).unwrap();
-    assert_eq!(s.drain_args(), ("d1".to_string(), 2));
+    assert_eq!(s.drain_args(), ("d1".to_string(), 2, false));
     assert_eq!(s.report.summary().addresses, 2);
 }
 
@@ -132,6 +132,7 @@ fn storage_cookies_and_origins() {
         u: "https://t.tracker.net/x".into(),
         t: "img".into(),
         o: String::new(),
+        c: String::new(),
     });
     r.set_cookies(vec![
         StoredCookie {
@@ -173,6 +174,7 @@ fn a_cookie_flood_cannot_hide_a_tracker() {
         u: "https://t.tracker.net/x".into(),
         t: "img".into(),
         o: String::new(),
+        c: String::new(),
     });
     let s = r.summary();
     assert_eq!(s.third_party_sites, vec!["tracker.net"]);
@@ -187,17 +189,31 @@ fn an_address_flood_cannot_hide_a_new_site() {
             u: format!("https://www.news.example.com/{i}"),
             t: "xhr".into(),
             o: String::new(),
+            c: String::new(),
         });
     }
     r.add_event(Event::Request {
         u: "https://t.tracker.net/x".into(),
         t: "img".into(),
         o: String::new(),
+        c: String::new(),
     });
+    for i in 0..60 {
+        r.add_event(Event::Request {
+            u: format!("https://t.tracker.net/{i}"),
+            t: "img".into(),
+            o: String::new(),
+            c: String::new(),
+        });
+    }
     let s = r.summary();
     assert_eq!(s.third_party_sites, vec!["tracker.net"]);
-    assert_eq!(s.addresses, MAX_ADDRESSES);
-    assert!(s.dropped >= 10);
+    assert_eq!(
+        s.addresses,
+        MAX_ADDRESSES + 50,
+        "the tracker keeps its reserve of 50"
+    );
+    assert!(s.dropped >= 10 + 11);
 }
 
 #[test]
@@ -208,6 +224,7 @@ fn long_text_is_clipped() {
         u: long,
         t: "img".into(),
         o: String::new(),
+        c: String::new(),
     });
     let key = r.requests.keys().next().unwrap();
     assert!(key.len() <= MAX_TEXT);
@@ -219,4 +236,43 @@ fn same_site() {
     assert!(r.same_site("https://shop.example.com/"));
     assert!(!r.same_site("https://example.org/"));
     assert!(!r.same_site("about:blank"));
+}
+
+#[test]
+fn unreadable_answers_lead_to_skip() {
+    let mut s = Session::default();
+    s.apply(&batch("d1", PAGE, 1, 0, &[])).unwrap();
+    assert!(!s.drain_args().2);
+    assert!(s.apply("{broken").is_err());
+    assert!(!s.drain_args().2, "one bad answer may be a fluke");
+    assert!(s.apply("{broken").is_err());
+    assert!(s.drain_args().2, "two in a row: tell the page to skip");
+    s.apply(&batch("d1", PAGE, 5, 4, &[])).unwrap();
+    assert!(!s.drain_args().2);
+    assert_eq!(s.report.summary().dropped, 4);
+}
+
+#[test]
+fn made_up_sites_cannot_hide_a_confirmed_one() {
+    use watchkeeper_core::MAX_SITES;
+    let mut r = SiteReport::new(PAGE);
+    for i in 0..MAX_SITES + 100 {
+        r.add_event(Event::Request {
+            u: format!("https://junk{i}.example/x"),
+            t: "xhr".into(),
+            o: String::new(),
+            c: String::new(),
+        });
+    }
+    r.add_event(Event::Request {
+        u: "https://real-tracker.net/p.gif".into(),
+        t: "img".into(),
+        o: String::new(),
+        c: "1".into(),
+    });
+    let s = r.summary();
+    assert!(s
+        .third_party_sites
+        .contains(&"real-tracker.net".to_string()));
+    assert_eq!(s.dropped, 100);
 }

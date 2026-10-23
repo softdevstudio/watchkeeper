@@ -225,17 +225,18 @@ fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
             let Some(view) = app.get_webview(PAGE) else {
                 continue;
             };
-            let (doc, ack) = shared
+            let (doc, ack, skip) = shared
                 .session
                 .lock()
                 .map(|s| s.drain_args())
                 .unwrap_or_default();
             let target = shared.clone();
-            let _ = view.eval_with_callback(drain_script(&shared.keys, &doc, ack), move |json| {
-                if let Ok(mut session) = target.session.lock() {
-                    let _ = session.apply(&json);
-                }
-            });
+            let _ =
+                view.eval_with_callback(drain_script(&shared.keys, &doc, ack, skip), move |json| {
+                    if let Ok(mut session) = target.session.lock() {
+                        let _ = session.apply(&json);
+                    }
+                });
             tick += 1;
             if tick.is_multiple_of(COOKIES_EVERY) {
                 // Reading cookies must stay off the main thread (WebView2
