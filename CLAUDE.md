@@ -116,6 +116,12 @@ October 23, 2026, session 5 (site) done, at YK's word "Go":
 - Hugo could not be installed in the cloud session, so the site was checked by parsing front matter against the rules and checking every internal link; it was not built locally.
 - The screenshot showed the address bar empty at start (autofocus set the toolbar's editing flag). Fixed in toolbar.js: only typing pauses the bar, and an untouched focused bar keeps its text selected. Self-test check "address bar shows the page" added (28 checks); the reviewer confirmed it fails on the old code. Released as 0.3.1.
 
+October 23, 2026, after session 5, at YK's word ("the domain is connected. add case studies, use examples, list and add notes"):
+
+- watchkeeper.net is live on its domain. Added three case studies (tag "case studies": a shop page before its cookie banner is answered, a recipe blog adding trackers between visits, a landing page report) and two use examples (tag "use examples": fingerprinting on a quiz, a staging site on localhost), each with a real screenshot, plus a Case Studies menu item (/tags/case-studies/). They are framed as made-up pages and state only what the pages and screenshots show.
+- examples/case-studies/server.py (Python, stdlib only) serves the made-up sites; README.md there gives the hosts line. The site's screenshots were taken from it.
+- softdevstudio.com lists Watchkeeper as the twenty-eighth project (data/studio.toml) with a note on 0.1.0 to 0.3.1; its CONTENT-PLAN.md has the brief, names, tag, footer, feeds row and session log row 2n.
+
 ## Next
 
-Nothing approved beyond session 5. All five plan items are done. Waiting for YK.
+Nothing approved beyond this. All five plan items are done. Waiting for YK.
