@@ -222,8 +222,10 @@
     } else if (k === 'fp') {
       var api = a === 'canvas' || a === 'webgl' || a === 'audio' ? a : '';
       if (!api) return;
-      var byc = clean(b);
-      var by = byc ? byc.url : '';
+      // "?" is a caller that could not be placed; anything else must be
+      // a web address.
+      var byc = b === '?' ? null : clean(b);
+      var by = b === '?' ? '?' : (byc ? byc.url : '');
       key = 'f ' + o + ' ' + api + ' ' + by;
       if (seen[key]) return;
       urgent = 1;
@@ -296,9 +298,11 @@
   // read at the place the engine puts the frame's address: after "at " or
   // inside "( )" in V8, after "@" in JavaScriptCore. Frames with no
   // address (this script, native code, eval) are passed over; a data: or
-  // blob: frame ends the search with no answer, since such a script has no
-  // site of its own. An empty answer means the frame's site. The Rust side
-  // also credits a script's site only when the engine loaded that script.
+  // blob: frame ends the search, since such a script has no site of its
+  // own. "?" means the caller could not be placed: code with no address
+  // (string timers, inline handlers, data: scripts) or a stack the page
+  // tampered with. The Rust side credits a script's site only when the
+  // engine loaded that script; a page's own inline code names the page.
   function own(o, k) {
     try { var d = o && R_getOwnPropertyDescriptor(o, k); return d ? d.value : undefined; } catch (e) { return undefined; }
   }
@@ -317,7 +321,7 @@
   }
   var E_prep0 = prepNow();
   function stackNow() {
-    if (prepNow() !== E_prep0) return '';
+    if (prepNow() !== E_prep0) return null;
     // A page can lower Error.stackTraceLimit to hide every caller; raise
     // it for this one capture and put the page's value back.
     var d = null, lim;
@@ -327,7 +331,7 @@
     var st = '';
     try { st = new E_Error().stack; } catch (e) { st = ''; }
     if (raise) { try { E_Error.stackTraceLimit = lim; } catch (e) { } }
-    return typeof st === 'string' ? st : '';
+    return typeof st === 'string' ? st : null;
   }
   function starts(s, p) { return call(S_slice, s, [0, p.length]) === p; }
   function frameAddress(line) {
@@ -355,13 +359,14 @@
   }
   function callerScript() {
     var st = stackNow();
+    if (st === null) return '?';
     var pos = 0;
     for (var n = 0; pos < st.length && n < 64; n++) {
       var nl = call(S_indexOf, st, ['\n', pos]);
       if (nl < 0) nl = st.length;
       var a = frameAddress(call(S_slice, st, [pos, nl]));
       pos = nl + 1;
-      if (starts(a, 'data:') || starts(a, 'blob:')) return '';
+      if (starts(a, 'data:') || starts(a, 'blob:')) return '?';
       if (!starts(a, 'http://') && !starts(a, 'https://')) continue;
       // Drop the :line:column at the end.
       var k = a.length;
@@ -371,9 +376,9 @@
         if (j < k && j > 0 && call(S_charCodeAt, a, [j - 1]) === 58) k = j - 1; else break;
       }
       var cl = clean(call(S_slice, a, [0, k]));
-      return cl ? cl.url : '';
+      return cl ? cl.url : '?';
     }
-    return '';
+    return '?';
   }
   function fp(api) {
     var by = callerScript();

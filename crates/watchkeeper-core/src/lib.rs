@@ -158,9 +158,12 @@ pub enum Event {
 pub struct FingerprintRead {
     /// canvas, webgl or audio.
     pub api: String,
-    /// Site of the script that made the read, when the page really loaded
-    /// that script; otherwise (an inline script, or an address the page
-    /// never requested) the site of the frame.
+    /// Site of the nearest script on the call stack when the read
+    /// happened, if the engine loaded that script. The page's own site for
+    /// its inline code or an address the engine never loaded. "unknown"
+    /// when the caller could not be placed (code with no address, such as
+    /// a string timer or inline handler, or a stack the page tampered
+    /// with).
     pub by: String,
 }
 
@@ -405,6 +408,13 @@ impl SiteReport {
     pub fn fingerprinting_by(&self) -> Vec<FingerprintRead> {
         let mut out = BTreeSet::new();
         for (api, script, frame) in &self.fingerprint_reads {
+            if script == "?" {
+                out.insert(FingerprintRead {
+                    api: api.clone(),
+                    by: "unknown".to_string(),
+                });
+                continue;
+            }
             let by = if !script.is_empty() && self.confirmed_scripts.contains(script) {
                 site_of_url(script).filter(|s| !s.is_empty())
             } else {

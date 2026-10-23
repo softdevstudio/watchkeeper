@@ -348,8 +348,10 @@ fn fingerprinting_credited_to_a_loaded_script_only() {
         // nowhere: credited to the page.
         req("https://innocent.org/lib.js", "xhr"),
         fp("webgl", "https://innocent.org/lib.js"),
-        // No address (inline script): credited to the page.
-        fp("audio", ""),
+        // No address: not placed.
+        fp("audio", "?"),
+        // The page's own inline code: its address is the page's.
+        fp("webgl", "https://www.news.example.com/story"),
     ];
     let evs: Vec<&str> = evs.iter().map(|s| s.as_str()).collect();
     s.apply(&batch("d1", PAGE, 1, 0, &evs)).unwrap();
@@ -363,7 +365,7 @@ fn fingerprinting_credited_to_a_loaded_script_only() {
     assert_eq!(
         by,
         vec![
-            "audio by example.com",
+            "audio by unknown",
             "canvas by tracker.net",
             "webgl by example.com"
         ]

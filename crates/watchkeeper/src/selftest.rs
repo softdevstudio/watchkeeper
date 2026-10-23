@@ -970,14 +970,16 @@ fn run_checks(
         .iter()
         .any(|(a, u, _)| a == "canvas" && u.ends_with("/h-tracker.js"));
     let faked = reads.iter().any(|(_, u, _)| u.ends_with("/h-fake.js"));
+    // The data: script has no address of its own, so its read is unplaced.
+    let unplaced = reads.iter().any(|(a, u, _)| a == "canvas" && u == "?");
     let rewritten = reads
         .iter()
         .any(|(a, u, _)| a == "audio" && u.ends_with("/h-tracker.js"));
     checks.push(check(
         "page cannot hide or fake who fingerprints",
-        done && real && !faked && !rewritten,
+        done && real && !faked && unplaced && !rewritten,
         format!(
-            "with the stack limit at 0, the tracker's own read named its script: {real}; a data: script naming an unloaded script credited to it: {faked}; a rewritten stack credited: {rewritten}"
+            "with the stack limit at 0, the tracker's own read named its script: {real}; a data: script naming an unloaded script credited to it: {faked}, shown as unknown: {unplaced}; a rewritten stack credited: {rewritten}"
         ),
     ));
 
