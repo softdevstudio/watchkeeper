@@ -75,3 +75,17 @@ html, body {
 .panel .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .panel .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
 .panel .warn { color: var(--accent); }
+.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 4px; }
+.panel #fp-list li { font-size: 12px; color: var(--muted); }
+.panel .buttons { display: flex; gap: 8px; margin-top: 10px; }
+.panel .buttons button {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}

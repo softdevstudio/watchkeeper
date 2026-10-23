@@ -328,3 +328,42 @@ fn same_site_frames_cannot_claim_confirmation() {
     assert!(!s.third_party_sites.iter().any(|x| x.starts_with("fake")));
     assert!(s.third_party_sites.contains(&"other.net".to_string()));
 }
+
+#[test]
+fn fingerprinting_credited_to_a_loaded_script_only() {
+    let mut s = Session::default();
+    let fp = |a: &str, u: &str| {
+        format!(r#"{{"k":"fp","a":"{a}","o":"https://www.news.example.com","u":"{u}"}}"#)
+    };
+    let evs = [
+        // The read comes before the engine lists the script: still credited.
+        fp("canvas", "https://fp.tracker.net/f.js"),
+        req("https://fp.tracker.net/f.js", "script"),
+        // A script address the page never loaded: credited to the page.
+        fp("webgl", "https://innocent.org/lib.js"),
+        // No address (inline script): credited to the page.
+        fp("audio", ""),
+    ];
+    let evs: Vec<&str> = evs.iter().map(|s| s.as_str()).collect();
+    s.apply(&batch("d1", PAGE, 1, 0, &evs)).unwrap();
+    let by: Vec<String> = s
+        .report
+        .summary()
+        .fingerprinting_by
+        .iter()
+        .map(|f| format!("{} by {}", f.api, f.by))
+        .collect();
+    assert_eq!(
+        by,
+        vec![
+            "audio by example.com",
+            "canvas by tracker.net",
+            "webgl by example.com"
+        ]
+    );
+    assert!(!s
+        .report
+        .summary()
+        .third_party_sites
+        .contains(&"innocent.org".to_string()));
+}

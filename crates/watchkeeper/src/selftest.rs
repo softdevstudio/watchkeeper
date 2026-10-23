@@ -809,6 +809,24 @@ fn run_checks(
         ),
     ));
 
+    // Each read must name the site of the script that made it: the
+    // tracker's script on localhost, not the page it ran in.
+    let reads = r.fingerprinting_by();
+    let by: Vec<String> = reads
+        .iter()
+        .map(|f| format!("{} by {}", f.api, f.by))
+        .collect();
+    let unattributed: Vec<&str> = want_fp
+        .iter()
+        .copied()
+        .filter(|a| !reads.iter().any(|f| f.api == *a && f.by == "localhost"))
+        .collect();
+    checks.push(check(
+        "fingerprinting credited to the script's site",
+        !want_fp.is_empty() && unattributed.is_empty(),
+        format!("seen {by:?}; not credited to localhost: {unattributed:?}"),
+    ));
+
     let httponly = r
         .cookies
         .iter()
@@ -1023,6 +1041,9 @@ fn run_checks(
         ),
     ));
 
+    // ---- 4. History between visits ------------------------------------------------
+    checks.extend(check_history(app, shared));
+
     let passed = checks.iter().all(|c| c.pass);
     let r = report(shared);
     Outcome {
@@ -1038,4 +1059,92 @@ fn run_checks(
         cookies: r.cookies.clone(),
         seconds: started.elapsed().as_secs_f64(),
     }
+}
+
+/// Sites in the history file on disk.
+fn history_sites(path: &std::path::Path) -> Vec<String> {
+    watchkeeper_core::history::History::load(path)
+        .0
+        .sites
+        .keys()
+        .cloned()
+        .collect()
+}
+
+/// The page is back on 127.0.0.1 for the second time, so the panel must
+/// show the first visit; the file must hold names only; the page must not
+/// be able to forget; the panel must.
+fn check_history(app: &AppHandle, shared: &Shared) -> Vec<Check> {
+    let mut checks = Vec::new();
+    let path = shared
+        .recorder
+        .lock()
+        .ok()
+        .and_then(|r| r.path().map(|p| p.to_path_buf()));
+    let Some(path) = path else {
+        checks.push(check(
+            "history kept per site",
+            false,
+            "history is off".into(),
+        ));
+        return checks;
+    };
+    shared.record();
+    shared.save_history();
+    let snap = shared.snapshot();
+    let text = std::fs::read_to_string(&path).unwrap_or_default();
+    let sites = history_sites(&path);
+    let last = snap.last_visit.clone();
+    let names_only = !text.is_empty() && !text.contains('/') && !text.contains("wk_");
+    checks.push(check(
+        "history kept per site",
+        snap.summary.site == "127.0.0.1"
+            && last.as_ref().is_some_and(|l| l.other_site_count >= 1)
+            && sites.contains(&"127.0.0.1".to_string())
+            && sites.contains(&"localhost".to_string())
+            && names_only,
+        format!(
+            "on {}, last visit {:?}; file holds {} bytes for sites {sites:?}; no addresses or cookie names: {names_only}",
+            snap.summary.site,
+            last.map(|l| format!("{} with {} other sites", l.date, l.other_site_count)),
+            text.len()
+        ),
+    ));
+
+    // The page tries to wipe the history; the panel then forgets one site
+    // and then everything.
+    let call = |label: &str, js: &str| {
+        if let Some(v) = app.get_webview(label) {
+            let _ = v.eval(format!(
+                "(function(){{var i=window.__TAURI_INTERNALS__;if(i&&i.invoke){{{js}}}}})()"
+            ));
+        }
+    };
+    call(PAGE, "i.invoke('forget_all').catch(function(){});i.invoke('forget_site',{site:'localhost'}).catch(function(){});");
+    std::thread::sleep(Duration::from_millis(1500));
+    let after_page = history_sites(&path);
+    call(
+        crate::PANEL,
+        "i.invoke('forget_site',{site:'localhost'}).catch(function(){});",
+    );
+    let one_gone = wait_until(Instant::now() + Duration::from_secs(5), || {
+        let s = history_sites(&path);
+        !s.contains(&"localhost".to_string()) && s.contains(&"127.0.0.1".to_string())
+    });
+    call(crate::PANEL, "i.invoke('forget_all').catch(function(){});");
+    let all_gone = wait_until(Instant::now() + Duration::from_secs(5), || {
+        history_sites(&path).is_empty()
+    });
+    // The visit in progress must not come back on the next rounds.
+    std::thread::sleep(Duration::from_millis(5500));
+    shared.save_history();
+    let still_gone = history_sites(&path).is_empty();
+    checks.push(check(
+        "only the panel can forget history",
+        after_page == sites && one_gone && all_gone && still_gone,
+        format!(
+            "after the page called forget: {after_page:?}; panel forgot localhost: {one_gone}; then everything: {all_gone}; still empty after the visit carried on: {still_gone}"
+        ),
+    ));
+    checks
 }

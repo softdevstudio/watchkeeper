@@ -22,9 +22,22 @@
     <div class="row"><span>Storage writes</span><span id="storage">0</span></div>
     <div class="row"><span>by frames from other sites</span><span id="third-storage">0</span></div>
     <div class="row"><span>Fingerprinting reads</span><span id="fp">none</span></div>
+    <ul id="fp-list"></ul>
     <div class="row"><span>Workers started</span><span id="workers">0</span></div>
 
     <p class="note warn" id="dropped" hidden></p>
+
+    <section id="history">
+      <h2>Last visit</h2>
+      <p class="note" id="last-visit">This is your first visit to this site that Watchkeeper has seen.</p>
+      <ul id="new-sites"></ul>
+      <p class="note" id="history-note" hidden></p>
+      <div class="buttons">
+        <button type="button" id="forget-site">Forget this site</button>
+        <button type="button" id="forget-all">Forget all</button>
+      </div>
+      <p class="note">Watchkeeper keeps a short record of each site you visit on this computer: the date and the names of the other sites it contacted. Never addresses, cookies or anything you type.</p>
+    </section>
     <p class="note">This session started empty and is deleted when Watchkeeper closes. Cookies for other sites may include ones they set on earlier pages in this session.</p>
   </div>
   <script src="panel.js"></script>

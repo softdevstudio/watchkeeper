@@ -18,7 +18,8 @@
         "connect-src": "ipc: http://ipc.localhost"
       },
       "capabilities": [
-        "ui"
+        "ui",
+        "panel"
       ]
     }
   },

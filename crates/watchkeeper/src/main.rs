@@ -12,6 +12,7 @@
 mod history;
 #[cfg(target_os = "linux")]
 mod linux_layout;
+mod recorder;
 mod selftest;
 
 use std::sync::{Arc, Mutex};
@@ -36,6 +37,8 @@ pub const PANEL_WIDTH: f64 = 320.0;
 const DRAIN_EVERY: Duration = Duration::from_millis(400);
 /// Cookies are read every this many collections.
 const COOKIES_EVERY: u64 = 3;
+/// History is written, when it changed, every this many collections.
+const SAVE_EVERY: u64 = 12;
 
 /// State shared by commands, the collector thread and the self-test.
 pub struct Shared {
@@ -43,6 +46,8 @@ pub struct Shared {
     pub keys: Keys,
     /// The page's full address, for the address bar only. Never recorded.
     pub address: Mutex<String>,
+    /// The per-site history kept between launches.
+    pub recorder: Mutex<recorder::Recorder>,
 }
 
 /// What the toolbar and panel show.
@@ -51,17 +56,50 @@ pub struct Snapshot {
     #[serde(flatten)]
     pub summary: Summary,
     pub address: String,
+    /// The last visit to this site before this one, if any.
+    pub last_visit: Option<watchkeeper_core::history::Comparison>,
+    /// Whether history is kept at all.
+    pub history: bool,
+    /// A problem with the history file, if any.
+    pub history_note: Option<String>,
 }
 
 impl Shared {
-    fn snapshot(&self) -> Snapshot {
+    pub fn snapshot(&self) -> Snapshot {
+        let (summary, visit) = self
+            .session
+            .lock()
+            .map(|s| (s.report.summary(), s.visit()))
+            .unwrap_or_default();
+        let (last_visit, history, history_note) = self
+            .recorder
+            .lock()
+            .map(|r| (r.compare(&summary.site, visit), r.enabled(), r.note.clone()))
+            .unwrap_or_default();
         Snapshot {
-            summary: self
-                .session
-                .lock()
-                .map(|s| s.report.summary())
-                .unwrap_or_default(),
+            summary,
             address: self.address.lock().map(|a| a.clone()).unwrap_or_default(),
+            last_visit,
+            history,
+            history_note,
+        }
+    }
+
+    /// Hands the current summary to the history recorder.
+    pub fn record(&self) {
+        let (summary, visit) = match self.session.lock() {
+            Ok(s) => (s.report.summary(), s.visit()),
+            Err(_) => return,
+        };
+        if let Ok(mut r) = self.recorder.lock() {
+            r.observe(&summary, visit);
+        }
+    }
+
+    /// Writes the history file if it changed.
+    pub fn save_history(&self) {
+        if let Ok(mut r) = self.recorder.lock() {
+            r.save_if_dirty();
         }
     }
 }
@@ -201,6 +239,33 @@ fn snapshot(shared: tauri::State<'_, Arc<Shared>>) -> Snapshot {
     shared.snapshot()
 }
 
+/// Forgets one site's history. Granted to the panel only.
+#[tauri::command]
+fn forget_site(shared: tauri::State<'_, Arc<Shared>>, site: String) {
+    if let Ok(mut r) = shared.recorder.lock() {
+        r.forget(&site);
+    }
+}
+
+/// Forgets all history. Granted to the panel only.
+#[tauri::command]
+fn forget_all(shared: tauri::State<'_, Arc<Shared>>) {
+    if let Ok(mut r) = shared.recorder.lock() {
+        r.forget_all();
+    }
+}
+
+/// Where the history file lives, or None with `--no-history`.
+fn history_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+    if std::env::args().any(|a| a == "--no-history") {
+        return None;
+    }
+    app.path()
+        .app_data_dir()
+        .ok()
+        .map(|d| d.join("history.json"))
+}
+
 fn random_hex() -> String {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).expect("no system randomness");
@@ -238,6 +303,10 @@ fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
                     }
                 });
             tick += 1;
+            shared.record();
+            if tick.is_multiple_of(SAVE_EVERY) {
+                shared.save_history();
+            }
             if tick.is_multiple_of(COOKIES_EVERY) {
                 // Reading cookies must stay off the main thread (WebView2
                 // deadlocks otherwise); this thread is fine.
@@ -343,16 +412,37 @@ fn main() {
         session: Mutex::new(Session::default()),
         keys,
         address: Mutex::new(String::new()),
+        recorder: Mutex::new(recorder::Recorder::new(None)),
     });
 
     let state = shared.clone();
-    let result = tauri::Builder::default()
+    let on_exit = shared.clone();
+    let built = tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
-            navigate, go_back, go_forward, reload, snapshot
+            navigate,
+            go_back,
+            go_forward,
+            reload,
+            snapshot,
+            forget_site,
+            forget_all
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
+            // The self-test keeps its history in its own folder.
+            let path = match &selftest_dir {
+                Some(dir) => {
+                    // Each run starts with no history.
+                    let p = dir.join("history.json");
+                    let _ = std::fs::remove_file(&p);
+                    Some(p)
+                }
+                None => history_path(&handle),
+            };
+            if let Ok(mut r) = shared.recorder.lock() {
+                *r = recorder::Recorder::new(path);
+            }
             let start = match &selftest_dir {
                 Some(dir) => selftest::start(&handle, shared.clone(), dir.clone())?,
                 None => start_url_from_args(),
@@ -361,10 +451,18 @@ fn main() {
             spawn_collector(handle, shared.clone());
             Ok(())
         })
-        .run(tauri::generate_context!());
-    if let Err(e) = result {
-        eprintln!("watchkeeper: {e}");
-        std::process::exit(1);
+        .build(tauri::generate_context!());
+    match built {
+        Ok(app) => app.run(move |_, event| {
+            if let tauri::RunEvent::Exit = event {
+                on_exit.record();
+                on_exit.save_history();
+            }
+        }),
+        Err(e) => {
+            eprintln!("watchkeeper: {e}");
+            std::process::exit(1);
+        }
     }
 }
 

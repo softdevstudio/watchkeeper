@@ -9,6 +9,8 @@ fn main() {
             "go_forward",
             "reload",
             "snapshot",
+            "forget_site",
+            "forget_all",
         ]),
     ))
     .expect("tauri build step failed");

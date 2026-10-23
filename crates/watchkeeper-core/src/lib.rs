@@ -23,6 +23,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use url::Url;
 
+pub mod history;
+
 const DETECT_TEMPLATE: &str = include_str!("../assets/detect.js");
 
 /// Distinct addresses kept per site.
@@ -145,7 +147,21 @@ pub enum Event {
         a: String,
         #[serde(default)]
         o: String,
+        /// Address of the script that made the read, when known.
+        #[serde(default)]
+        u: String,
     },
+}
+
+/// A fingerprinting read and the site whose script made it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct FingerprintRead {
+    /// canvas, webgl or audio.
+    pub api: String,
+    /// Site of the script that made the read, when the page really loaded
+    /// that script; otherwise (an inline script, or an address the page
+    /// never requested) the site of the frame.
+    pub by: String,
 }
 
 /// A cookie as the engine's cookie store reports it.
@@ -215,6 +231,9 @@ pub struct SiteReport {
     pub storage: BTreeSet<(String, String, String)>,
     /// Fingerprinting reads: canvas, webgl, audio.
     pub fingerprinting: BTreeSet<String>,
+    /// Fingerprinting reads as (api, address of the calling script as the
+    /// engine's stack names it, site of the frame). See `fingerprinting_by`.
+    pub fingerprint_reads: BTreeSet<(String, String, String)>,
     /// Cookies in the engine's store at the last refresh.
     pub cookies: Vec<StoredCookie>,
     /// Events the page made that could not be counted: the page's buffer
@@ -242,6 +261,8 @@ pub struct Summary {
     pub third_party_storage_writes: usize,
     /// Fingerprinting reads seen.
     pub fingerprinting: Vec<String>,
+    /// The same, with the site whose script made each read.
+    pub fingerprinting_by: Vec<FingerprintRead>,
     /// Workers started (their own traffic is not visible).
     pub workers: usize,
     /// Events that could not be counted.
@@ -340,12 +361,40 @@ impl SiteReport {
                     }
                 }
             }
-            Event::Fingerprint { a, .. } => {
+            Event::Fingerprint { a, o, u } => {
+                let key = (clip(&a), clip(&u), self.site_of_origin(&o));
+                if !self.fingerprint_reads.contains(&key) {
+                    if self.fingerprint_reads.len() < 64 {
+                        self.fingerprint_reads.insert(key);
+                    } else {
+                        self.dropped += 1;
+                    }
+                }
                 if self.fingerprinting.len() < 16 {
                     self.fingerprinting.insert(clip(&a));
                 }
             }
         }
+    }
+
+    /// Each fingerprinting read with the site whose script made it. The
+    /// script's address comes from the engine's stack, which a page can
+    /// bend on some engines, so it counts only when the page really
+    /// requested that address; otherwise the read goes to the frame's site.
+    pub fn fingerprinting_by(&self) -> Vec<FingerprintRead> {
+        let mut out = BTreeSet::new();
+        for (api, script, frame) in &self.fingerprint_reads {
+            let by = if !script.is_empty() && self.requests.contains_key(script) {
+                site_of_url(script).filter(|s| !s.is_empty())
+            } else {
+                None
+            };
+            out.insert(FingerprintRead {
+                api: api.clone(),
+                by: by.unwrap_or_else(|| frame.clone()),
+            });
+        }
+        out.into_iter().collect()
     }
 
     /// Whether a script cookie with this name was seen.
@@ -395,6 +444,7 @@ impl SiteReport {
                 .filter(|(s, _, _)| *s != self.site)
                 .count(),
             fingerprinting: self.fingerprinting.iter().cloned().collect(),
+            fingerprinting_by: self.fingerprinting_by(),
             workers: self
                 .requests
                 .values()
@@ -436,9 +486,16 @@ pub struct Session {
     js_dropped: u64,
     retired: VecDeque<String>,
     failures: u32,
+    visit: u64,
 }
 
 impl Session {
+    /// Counts visits: it goes up each time the report starts over for a
+    /// new site, and stays the same across pages of one site.
+    pub fn visit(&self) -> u64 {
+        self.visit
+    }
+
     /// The document id, acknowledgement and skip flag to send with the
     /// next drain. After two answers in a row that could not be read, the
     /// page is told to give up on what it holds, so one bad answer cannot
@@ -488,6 +545,7 @@ impl Session {
             let cookies = std::mem::take(&mut self.report.cookies);
             if self.report.site.is_empty() || !self.report.same_site(&batch.url) {
                 self.report = SiteReport::new(&batch.url);
+                self.visit += 1;
             }
             self.report.cookies = cookies;
             self.doc = batch.doc.clone();

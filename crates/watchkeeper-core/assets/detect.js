@@ -44,6 +44,7 @@
   var M_random = Math.random;
   var M_floor = Math.floor;
   var D_now = Date.now;
+  var E_Error = Error;
   var W = window;
   var hasOwn = Object.prototype.hasOwnProperty;
 
@@ -220,10 +221,12 @@
     } else if (k === 'fp') {
       var api = a === 'canvas' || a === 'webgl' || a === 'audio' ? a : '';
       if (!api) return;
-      key = 'f ' + o + ' ' + api;
+      var byc = clean(b);
+      var by = byc ? byc.url : '';
+      key = 'f ' + o + ' ' + api + ' ' + by;
       if (seen[key]) return;
       urgent = 1;
-      ev = { k: 'fp', o: o, a: api };
+      ev = { k: 'fp', o: o, a: api, u: by };
     } else {
       return;
     }
@@ -288,9 +291,42 @@
     if (!once('s ' + kind + ' ' + n)) return;
     submit('store', kind, n, '');
   }
+  // Which script made a call: the first web address in a fresh call
+  // stack. This script itself has none, so the first one found is the
+  // caller's. A page can blur this (V8 lets it reformat stacks), but only
+  // for its own calls; an empty answer falls back to the frame's site.
+  function callerScript() {
+    var st = '';
+    try { st = new E_Error().stack; } catch (e) { return ''; }
+    if (typeof st !== 'string') return '';
+    var at = idx(st, 'http');
+    while (at >= 0) {
+      var end = at;
+      while (end < st.length) {
+        var ch = call(S_charCodeAt, st, [end]);
+        if (ch <= 32 || ch === 41 || ch === 40) break; // space, ( and )
+        end++;
+      }
+      var u = call(S_slice, st, [at, end]);
+      // Drop the :line:column at the end.
+      var k = u.length;
+      for (var pass = 0; pass < 2; pass++) {
+        var j = k;
+        while (j > 0) { var d = call(S_charCodeAt, u, [j - 1]); if (d < 48 || d > 57) break; j--; }
+        if (j < k && j > 0 && call(S_charCodeAt, u, [j - 1]) === 58) k = j - 1; else break;
+      }
+      var cl = clean(call(S_slice, u, [0, k]));
+      if (cl) return cl.url;
+      var rest = call(S_slice, st, [end]);
+      var nx = idx(rest, 'http');
+      at = nx < 0 ? -1 : end + nx;
+    }
+    return '';
+  }
   function fp(api) {
-    if (!once('f ' + api)) return;
-    submit('fp', api, '', '');
+    var by = callerScript();
+    if (!once('f ' + api + ' ' + by)) return;
+    submit('fp', api, by, '');
   }
 
   // Storage objects and their key listing, captured now.
