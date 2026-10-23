@@ -308,7 +308,15 @@ fn same_site_frames_cannot_claim_confirmation() {
             m: "1".into(),
         });
     }
-    // From a frame on another site: accepted.
+    // From a frame on another site, about a third site: refused.
+    r.add_event(Event::Request {
+        u: "https://fake9.example/p".into(),
+        t: "img".into(),
+        o: "https://frame.other.net".into(),
+        c: "1".into(),
+        m: "1".into(),
+    });
+    // From a frame on another site, about its own site: accepted.
     r.add_event(Event::Request {
         u: "https://cdn.other.net/p".into(),
         t: "img".into(),

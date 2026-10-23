@@ -275,11 +275,14 @@ impl SiteReport {
                     return;
                 };
                 // A claim of engine confirmation from a sub-frame counts
-                // only when the frame is on another site: the page can
-                // drive frames of its own site.
+                // only when the frame is on another site (the page can
+                // drive frames of its own site) and the address is on the
+                // frame's own site.
+                // A frame can only vouch for its own site's addresses.
                 let confirmed = c == "1"
                     && (m != "1"
-                        || site_of_url(&o).is_some_and(|s| !s.is_empty() && s != self.site));
+                        || site_of_url(&o)
+                            .is_some_and(|s| !s.is_empty() && s != self.site && s == site));
                 let c = if confirmed { "1" } else { "" };
                 if site != self.site && !self.other_sites.contains(&site) {
                     if self.other_sites.len() < MAX_SITES {

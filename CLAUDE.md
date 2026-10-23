@@ -63,7 +63,7 @@ photozeitgeist/watchkeeper.net uses the unchanged Hugo Launch template: keep the
 
 ## Development plan
 
-Agreed with YK on October 23, 2026, as the plan; YK approved session 1. Each later session needs YK's go-ahead. Pause and report after each session.
+Agreed with YK on October 23, 2026, as the plan; YK approved sessions 1 and 2. Each later session needs YK's go-ahead. Pause and report after each session.
 
 1. Foundation and layout prototype: repository, license files, CI on three OSes, core crate, detection script, page plus panel in one window, end-to-end self-test.
 2. Version 0.1: browser window with address bar, back, forward and reload, and the live panel per site (other sites contacted, cookies, storage writes); disposable session per launch; release workflow and installers.
@@ -82,6 +82,14 @@ October 23, 2026, session 1 (foundation and layout prototype) done:
 - Self-test on WebKitGTK 2.52.6 (Ubuntu 24.04, Xvfb): every one of the 10 tracker requests seen (style, script, pixel, fetch, XHR, beacon, iframe, a call from inside the iframe, the fingerprint report and a call 1.5 s late); script cookies, all four storage writes, canvas, WebGL and audio reads seen; the HttpOnly server cookie read from the engine; the page's call to an app command refused. WebKitGTK did not store the tracker's third-party cookie, as expected for that engine.
 - Results for Windows and macOS come from CI.
 
+October 23, 2026, session 2 (version 0.1) done, at YK's word "Go":
+
+- App: address bar (full address shown there only, never recorded), native back and forward (src/history.rs), Webview::reload, command-line start address (watchkeeper example.com), on_navigation filter, panel with addresses, cookies, storage writes (and by other sites), fingerprinting reads, workers and a line when the page did more than could be counted.
+- Release workflow (.github/workflows/release.yml): after CI on main, for a version with no tag (0.0.x never released) builds .deb and AppImage (ubuntu-22.04), .dmg (macos-latest arm64, macos-15-intel), .msi (windows-latest) with tauri-cli 2.12.4, runs the self-test with each release build on its own runner, then tags and publishes "Watchkeeper vX.Y.Z" with SHA256SUMS. Installer names carry no version.
+- Independent review in three rounds by one reviewer agent that had not seen the implementation, each with probe pages against a scratch copy. Round 1: IPC boundary held; found the drain name readable and drainable, built-ins replaceable to blind the detector, Back trappable, event caps burnable and hidden, silent buffer loss, worker and unload gaps, iframe direct storage missed, wrappers breaking subclassing, no URL bounds, early drains lost on WebKitGTK, README claims ahead of the repo. Round 2: forged sub-frame text stalling collection, oversized batches, back-forward cache pages invisible (and wrong site after a cross-site Back), read-twice addresses, made-up site floods. Round 3: lone surrogates breaking JSON and forcing skip, sandboxed frames claiming confirmation, the 60,000 seen cap. All fixed as described in Design and covered by the self-test; the final round reported no regressions. Two residual cases accepted and stated in the README: a frame on a second domain the page controls can still claim confirmation for its own site's addresses only; a WebSocket, EventSource or worker start after roughly 100,000 calls can be dropped (counted).
+- Self-test now 21 checks; passes on Linux (WebKitGTK 2.52.6, local, repeated runs), and in CI on ubuntu-latest, macos-latest and windows-latest (WebView2 155). Edge's engine sometimes sends an unmarked request to a server root by itself; the test lists it as the engine's own.
+- CI annotations carry each OS's self-test lines, readable with gh api check-runs annotations (job logs and artifacts are not downloadable from the cloud session).
+
 ## Next
 
-Nothing approved beyond session 1. Waiting for YK.
+Nothing approved beyond session 2. Waiting for YK. Plan items 3 (0.2: fingerprinting history per site), 4 (0.3: Report export) and 5 (site) remain.

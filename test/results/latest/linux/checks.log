@@ -1,15 +1,19 @@
-date: 2026-10-23T10:07:00Z
-commit: 6aa7d40
+date: 2026-10-23T11:43:37Z
+commit: 1a5b1b6
 os: linux (Linux 6.18.44-fc-v153 x86_64)
 rustc 1.97.0 (2d8144b78 2026-07-07)
 cargo 1.97.0 (c980f4866 2026-06-30)
 
 == cargo fmt --all -- --check
 == cargo clippy --locked --all-targets -- -D warnings
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.53s
+    Checking watchkeeper-core v0.1.0 (/home/claude/watchkeeper/crates/watchkeeper-core)
+   Compiling watchkeeper v0.1.0 (/home/claude/watchkeeper/crates/watchkeeper)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.46s
 == cargo test --locked
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
-     Running unittests src/main.rs (target/debug/deps/watchkeeper-e8bc4ecf0c16af44)
+   Compiling watchkeeper-core v0.1.0 (/home/claude/watchkeeper/crates/watchkeeper-core)
+   Compiling watchkeeper v0.1.0 (/home/claude/watchkeeper/crates/watchkeeper)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.38s
+     Running unittests src/main.rs (target/debug/deps/watchkeeper-0ad713e4943bb7c8)
 
 running 2 tests
 test tests::layout_tiles_the_window ... ok
@@ -17,25 +21,32 @@ test tests::urls ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running unittests src/lib.rs (target/debug/deps/watchkeeper_core-7f4283bc52ca1ba4)
+     Running unittests src/lib.rs (target/debug/deps/watchkeeper_core-e4622b658af585b6)
 
 running 2 tests
-test tests::token_is_checked ... ok
+test tests::keys_are_checked ... ok
 test tests::sites ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-     Running tests/report.rs (target/debug/deps/report-3718b5ed29a4af93)
+     Running tests/report.rs (target/debug/deps/report-327b581f86e85864)
 
-running 6 tests
-test counts_third_party_sites_and_requests ... ok
-test double_encoded_json_is_accepted ... ok
-test malformed_input_is_rejected_unknown_kinds_skipped ... ok
+running 13 tests
+test acknowledged_events_are_not_counted_twice ... ok
+test a_cookie_flood_cannot_hide_a_tracker ... ok
+test counts_other_sites_and_addresses ... ok
+test long_text_is_clipped ... ok
+test made_up_sites_cannot_hide_a_confirmed_one ... ok
+test new_site_resets_same_site_carries_on_stale_ignored ... ok
+test nothing_double_encoded_and_malformed ... ok
+test page_dropped_counts_are_reported ... ok
 test same_site ... ok
-test storage_and_cookies ... ok
-test cap_drops_and_counts ... ok
+test an_address_flood_cannot_hide_a_new_site ... ok
+test storage_cookies_and_origins ... ok
+test unreadable_answers_lead_to_skip ... ok
+test same_site_frames_cannot_claim_confirmation ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
 
    Doc-tests watchkeeper_core
 
@@ -44,17 +55,28 @@ running 0 tests
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
 == cargo build --locked -p watchkeeper
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
 == selftest
-PASS page loaded: tracker received 10 requests
+PASS page loaded: tracker received 15 requests
 PASS layout at start: content 1200x800; toolbar 1200x48 at (0,0), page 880x752 at (0,48), panel 320x752 at (880,48)
-PASS every tracker request seen: 10 distinct tracker URLs seen: /beacon /collect /fp /frame-call /frame.html /late /pixel.gif /style.css /tracker.js /xhr
+PASS every tracker request seen: 14 distinct tracker addresses seen: /beacon /collect /fp /frame-call /frame.html /late /pixel.gif /style.css /tracker.js /tt-first /wrap /ws /ws-sub /xhr; known out of sight: /worker-call; made by the engine itself: none
 PASS sites told apart: site 127.0.0.1 contacted ["localhost"]
-PASS script cookies seen: seen {"wk_js", "wk_page"}
-PASS storage writes seen: seen {("indexedDB", "wk_db"), ("localStorage", "direct_key"), ("localStorage", "wk_ls"), ("sessionStorage", "wk_ss")}
-PASS fingerprinting reads seen: tracker reported "canvas=1&webgl=1&audio=1&idb=1"; seen {"audio", "canvas", "webgl"}
+PASS WebSockets seen: tracker server saw ["/ws", "/ws-sub"]; report has /ws true and /ws-sub true
+PASS wrapped classes behave like the originals: page reported "sub=1&nonew=threw&aud=1&fetchname=fetch"
+PASS worker start seen: 1 worker(s) reported
+PASS script cookies seen: seen {("127.0.0.1", "wk_js"), ("127.0.0.1", "wk_page")}, missing []
+PASS storage writes seen, with the writing site: seen {("127.0.0.1", "indexedDB", "wk_db"), ("127.0.0.1", "localStorage", "direct_key"), ("127.0.0.1", "localStorage", "wk_ls"), ("127.0.0.1", "sessionStorage", "wk_ss"), ("localhost", "localStorage", "tp_direct"), ("localhost", "localStorage", "tp_set")}, missing []; frame write credited to localhost: true
+PASS fingerprinting reads seen: tracker reported "canvas=1&webgl=1&audio=1&idb=1"; seen {"audio", "canvas", "webgl"}, missing []
 PASS server cookie read from the engine: 3 cookies in the store: wk_session@127.0.0.1 (HttpOnly), wk_page@127.0.0.1, wk_js@127.0.0.1
 PASS page cannot call app commands: IPC bridge present, snapshot command refused
 PASS layout after resize: content 900x600; toolbar 900x48 at (0,0), page 580x552 at (0,48), panel 320x552 at (580,48)
-selftest passed in 5.4s on linux (Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15)
+PASS hostile page cannot blind the detector: after the page replaced built-ins and flooded, still seen: /h-tracker.js /h-pixel.gif /h-collect /h-beacon; WebSocket /h-ws seen
+PASS hostile page cannot drain the collector: page reported "found=1&drained=0" (found = collectors it could name)
+PASS forged frame messages cannot stall or corrupt collection: page learned the frame key and sent forged messages ("key=1&n=4207"); collection carried on: true
+PASS broken text cannot stop collection: storage key with a lone surrogate recorded as \u{fffd}bad: true; collection carried on: true
+PASS made-up sites cannot hide a real new one: skipped: no IPv6 loopback on this machine
+PASS floods are reported, not hidden: 73826 events from the flood reported as not counted; 9004 distinct addresses kept
+PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:33925/hostile; the page's history.back called: false
+PASS a page brought back by Back is watched as its own site: report site went localhost (localhost) then 127.0.0.1; after Back the page called ["/after-back-restored"], all in the report: true
+selftest passed in 15.4s on linux (Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15)
 selftest exit code: 0

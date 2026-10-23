@@ -183,6 +183,11 @@
       if (!cl) return;
       var t = field(b, 32) || 'other';
       var conf = c === '1' ? '1' : '';
+      // A frame can only vouch for addresses on its own host.
+      if (conf && fromMsg) {
+        var oc = clean(o);
+        if (!oc || oc.host !== cl.host) conf = '';
+      }
       // Each host's first addresses travel in the reserve lane, so one
       // host's flood cannot crowd out another's. Hosts the engine really
       // contacted are counted apart from hosts only named in calls.
