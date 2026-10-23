@@ -33,9 +33,9 @@ Watchkeeper records names and addresses without query strings, never values. It 
 
 **Save report** in the panel writes two files about the site in the window to your Downloads folder: an HTML page you can open in any browser and a JSON file for tools. Both are named after the site and the time, for example `watchkeeper-example.com-2026-10-23-140805.html`, and an existing file is never overwritten.
 
-A report holds everything the panel counts, in full: each other site told about the visit with every address on it and how it was reached, the cookies in the session's store and whom they belong to, cookie names written by scripts, storage writes, fingerprinting reads and who made them, workers started, how much the page did that could not be counted, the last visit when history is kept, and what Watchkeeper cannot see. Like everything else in Watchkeeper it has names and addresses without query strings, never cookie or storage values.
+A report holds everything the panel counts, in full: each other site told about the visit with every address on it and how it was reached, the cookies in the session's store for this site and the sites it contacted (cookies left by other sites you visited earlier are counted, not named), cookie names written by scripts, storage writes, fingerprinting reads and who made them, workers started, how much the page did that could not be counted, the last visit when history is kept, and what Watchkeeper cannot see. Like everything else in Watchkeeper it has names and addresses without query strings, never cookie or storage values.
 
-Everything in a report came from the page, so the HTML shows it all as plain text. It has no scripts and no links, and it tells the browser that opens it to load nothing at all. Only Watchkeeper's own panel can save a report; a web page cannot.
+Everything in a report came from the page, so the HTML shows it all as plain text, with characters that reverse or hide text replaced by a visible mark. It has no scripts and no links, and it tells the browser that opens it to load nothing at all. Only Watchkeeper's own panel can save a report; a web page cannot.
 
 The JSON starts with `"format": "watchkeeper-report"` and a `format_version`, so tools can tell what they are reading.
 

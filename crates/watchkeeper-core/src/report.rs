@@ -48,8 +48,7 @@ pub struct Cookie {
     pub name: String,
     pub domain: String,
     pub http_only: bool,
-    /// "this site", "other site" (one this page contacted) or "earlier"
-    /// (left in the session by an earlier page).
+    /// "this site" or "other site" (one this page contacted).
     pub belongs_to: String,
 }
 
@@ -86,7 +85,13 @@ pub struct Report {
     pub other_sites: Vec<OtherSite>,
     /// Addresses on the site itself.
     pub own_addresses: Vec<Address>,
+    /// Cookies in the session's store for this site and the other sites
+    /// it contacted.
     pub cookies: Vec<Cookie>,
+    /// Cookies in the store left by earlier, unrelated sites in the
+    /// session: counted, never named, so a report says nothing about
+    /// other sites the person visited.
+    pub earlier_cookies: usize,
     pub script_cookies: Vec<Named>,
     pub storage_writes: Vec<StorageWrite>,
     pub fingerprinting: Vec<FingerprintRead>,
@@ -125,40 +130,37 @@ impl Report {
                 None => own.push(a),
             }
         }
-        // Sites named without an address kept (past the address limit)
-        // are still listed.
-        for s in &r.other_sites {
-            by_site.entry(s.clone()).or_default();
-        }
-        let other_sites = by_site
-            .into_iter()
-            .filter(|(s, _)| *s != r.site)
-            .map(|(site, addresses)| OtherSite {
-                confirmed: r.confirmed_sites.contains(&site),
-                site,
-                addresses,
-            })
-            .collect();
-        let cookies = r
-            .cookies
+        // The same sites the panel lists. Addresses on sites past the
+        // site limit were counted as dropped and are left out here too.
+        let other_sites = r
+            .other_sites
             .iter()
-            .map(|c| {
-                let site = site_of_host(c.domain.trim_start_matches('.'));
-                let belongs_to = if site == r.site {
-                    "this site"
-                } else if r.other_sites.contains(&site) {
-                    "other site"
-                } else {
-                    "earlier"
-                };
-                Cookie {
-                    name: c.name.clone(),
-                    domain: c.domain.clone(),
-                    http_only: c.http_only,
-                    belongs_to: belongs_to.to_string(),
-                }
+            .filter(|s| **s != r.site)
+            .map(|site| OtherSite {
+                confirmed: r.confirmed_sites.contains(site),
+                addresses: by_site.remove(site).unwrap_or_default(),
+                site: site.clone(),
             })
             .collect();
+        let mut cookies = Vec::new();
+        let mut earlier_cookies = 0;
+        for c in &r.cookies {
+            let site = site_of_host(c.domain.trim_start_matches('.'));
+            let belongs_to = if site == r.site {
+                "this site"
+            } else if r.other_sites.contains(&site) {
+                "other site"
+            } else {
+                earlier_cookies += 1;
+                continue;
+            };
+            cookies.push(Cookie {
+                name: c.name.clone(),
+                domain: c.domain.clone(),
+                http_only: c.http_only,
+                belongs_to: belongs_to.to_string(),
+            });
+        }
         Report {
             format: FORMAT,
             format_version: FORMAT_VERSION,
@@ -171,6 +173,7 @@ impl Report {
             other_sites,
             own_addresses: own,
             cookies,
+            earlier_cookies,
             script_cookies: r
                 .script_cookies
                 .iter()
@@ -239,7 +242,11 @@ impl Report {
         count(&mut h, s.first_party_cookies, "cookies for this site");
         count(&mut h, s.third_party_cookies, "cookies for other sites");
         count(&mut h, s.storage_writes, "storage writes");
-        count(&mut h, self.fingerprinting.len(), "fingerprinting reads");
+        count(
+            &mut h,
+            s.fingerprinting.len(),
+            "kinds of fingerprinting read",
+        );
         h.push_str("</section>\n");
         if self.dropped > 0 {
             h.push_str(&format!(
@@ -306,6 +313,12 @@ impl Report {
                 ));
             }
             h.push_str("</table>\n");
+        }
+        if self.earlier_cookies > 0 {
+            h.push_str(&format!(
+                "<p class=\"muted\">{} more cookies in the store were left by earlier sites in the session. They are not named here.</p>\n",
+                self.earlier_cookies
+            ));
         }
 
         h.push_str("<h2>Cookies written by scripts</h2>\n");
@@ -406,6 +419,14 @@ pub fn esc(s: &str) -> String {
             '"' => out.push_str("&quot;"),
             '\'' => out.push_str("&#39;"),
             c if (c as u32) < 0x20 && c != '\n' && c != '\t' => out.push('\u{fffd}'),
+            // C1 controls, and characters that reorder or hide text
+            // (direction overrides, zero-width marks), so a page cannot
+            // make its names read misleadingly.
+            '\u{7f}'..='\u{9f}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{feff}' => out.push('\u{fffd}'),
             c => out.push(c),
         }
     }
@@ -494,8 +515,19 @@ pub fn write_files(dir: &Path, report: &Report, stem: &str) -> std::io::Result<(
                 return Err(e);
             }
         };
-        hf.write_all(html.as_bytes())?;
-        jf.write_all(json.as_bytes())?;
+        let written = hf
+            .write_all(html.as_bytes())
+            .and_then(|_| hf.sync_all())
+            .and_then(|_| jf.write_all(json.as_bytes()))
+            .and_then(|_| jf.sync_all());
+        if let Err(e) = written {
+            // No half-written report is left behind.
+            drop(hf);
+            drop(jf);
+            let _ = std::fs::remove_file(&hp);
+            let _ = std::fs::remove_file(&jp);
+            return Err(e);
+        }
         return Ok((hp, jp));
     }
     Err(std::io::Error::other("no free file name"))

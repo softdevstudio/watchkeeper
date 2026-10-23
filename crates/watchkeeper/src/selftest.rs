@@ -1251,8 +1251,18 @@ fn check_report(
     std::thread::sleep(Duration::from_millis(1500));
     let after_page = report_files(shared);
     call(crate::PANEL);
+    // Done when both files are there and the JSON, written last, parses.
     let made = wait_until(Instant::now() + Duration::from_secs(10), || {
-        report_files(shared).len() >= after_page.len() + 2
+        report_files(shared)
+            .iter()
+            .filter(|p| !after_page.contains(p))
+            .filter(|p| p.extension().is_some_and(|e| e == "json"))
+            .any(|p| {
+                std::fs::read_to_string(p)
+                    .ok()
+                    .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                    .is_some()
+            })
     });
     let new: Vec<std::path::PathBuf> = report_files(shared)
         .into_iter()
@@ -1283,6 +1293,19 @@ fn check_report(
         .map(|u| u.path().to_string())
         .collect();
     let missing: Vec<&String> = seen.iter().filter(|p| !listed.contains(p)).collect();
+    // The report lists the same sites the panel counts.
+    let (listed_sites, counted_sites) = json
+        .as_ref()
+        .map(|j| {
+            (
+                j["other_sites"].as_array().map(|a| a.len()).unwrap_or(0),
+                j["summary"]["third_party_sites"]
+                    .as_array()
+                    .map(|a| a.len())
+                    .unwrap_or(usize::MAX),
+            )
+        })
+        .unwrap_or((0, usize::MAX));
     let lower = html.to_ascii_lowercase();
     let inert = !html.is_empty()
         && !lower.contains("<script")
@@ -1292,9 +1315,14 @@ fn check_report(
     let page_refused = after_page == before;
     check(
         name,
-        page_refused && made && json.is_some() && missing.is_empty() && inert,
+        page_refused
+            && made
+            && json.is_some()
+            && missing.is_empty()
+            && listed_sites == counted_sites
+            && inert,
         format!(
-            "page's save refused: {page_refused}; panel saved {:?}; JSON parses: {}, lists {} of {} tracker addresses (missing {missing:?}); HTML {} bytes, inert: {inert}",
+            "page's save refused: {page_refused}; panel saved {:?}; JSON parses: {}, lists {} of {} tracker addresses (missing {missing:?}) and {listed_sites} other sites, as the panel counts {counted_sites}; HTML {} bytes, inert: {inert}",
             new.iter()
                 .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
                 .collect::<Vec<_>>(),

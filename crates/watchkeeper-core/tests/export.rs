@@ -77,7 +77,10 @@ fn report_holds_everything_seen() {
     assert_eq!(r.workers, vec!["https://w.tracker.net/worker.js"]);
     assert_eq!(r.fingerprinting[0].by, "tracker.net");
     let belongs: Vec<&str> = r.cookies.iter().map(|c| c.belongs_to.as_str()).collect();
-    assert_eq!(belongs, vec!["this site", "other site", "earlier"]);
+    assert_eq!(belongs, vec!["this site", "other site"]);
+    assert_eq!(r.earlier_cookies, 1, "counted, not named");
+    assert!(!r.to_json().contains("elsewhere.org"));
+    assert!(!r.to_html().contains("elsewhere.org"));
     assert_eq!(r.script_cookies[0].name, "wk_js");
     assert_eq!(r.storage_writes[0].key, "seen");
     assert!(!r.cannot_see.is_empty());
@@ -121,6 +124,15 @@ fn hostile_names_stay_text() {
     assert!(lower.contains("default-src 'none'"));
     assert!(html.contains("&lt;script&gt;alert(1)&lt;/script&gt;"));
     assert_eq!(esc("a&b\"'\u{0}"), "a&amp;b&quot;&#39;\u{fffd}");
+    assert_eq!(
+        esc("\u{202e}gnp.exe\u{200b}\u{85}"),
+        "\u{fffd}gnp.exe\u{fffd}\u{fffd}"
+    );
+    assert_eq!(
+        esc("caf\u{e9} \u{65e5}"),
+        "caf\u{e9} \u{65e5}",
+        "ordinary text kept"
+    );
 }
 
 #[test]
@@ -154,4 +166,19 @@ fn files_are_never_overwritten() {
     assert!(std::fs::read_to_string(&h1)
         .unwrap()
         .starts_with("<!doctype html>"));
+}
+
+#[test]
+fn site_list_matches_the_panel() {
+    use watchkeeper_core::MAX_SITES;
+    let mut s = Session::default();
+    let evs: Vec<String> = (0..MAX_SITES + 40)
+        .map(|i| req(&format!("https://s{i}.made.example{i}/x"), "xhr", ""))
+        .collect();
+    s.apply(&batch(&evs)).unwrap();
+    let r = Report::new(&s.report, None, "0.3.0", "linux", 0);
+    assert_eq!(r.other_sites.len(), r.summary.third_party_sites.len());
+    assert_eq!(r.other_sites.len(), MAX_SITES);
+    assert!(r.dropped >= 40);
+    assert!(r.to_html().contains(&format!("<b>{MAX_SITES}</b>")));
 }
