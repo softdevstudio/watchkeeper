@@ -10,6 +10,7 @@ PASS worker start seen: 1 worker(s) reported
 PASS script cookies seen: seen {("127.0.0.1", "wk_js"), ("127.0.0.1", "wk_page")}, missing []
 PASS storage writes seen, with the writing site: seen {("127.0.0.1", "indexedDB", "wk_db"), ("127.0.0.1", "localStorage", "direct_key"), ("127.0.0.1", "localStorage", "wk_ls"), ("127.0.0.1", "sessionStorage", "wk_ss"), ("localhost", "localStorage", "tp_direct"), ("localhost", "localStorage", "tp_set")}, missing []; frame write credited to localhost: true
 PASS fingerprinting reads seen: tracker reported "canvas=1&webgl=1&audio=1&idb=1"; seen {"audio", "canvas", "webgl"}, missing []
+PASS fingerprinting credited to the script's site: seen ["audio by localhost", "canvas by localhost", "webgl by localhost"]; not credited to localhost: []
 PASS server cookie read from the engine: 3 cookies in the store: wk_session@127.0.0.1 (HttpOnly), wk_page@127.0.0.1, wk_js@127.0.0.1
 PASS page cannot call app commands: IPC bridge present, snapshot command refused
 PASS layout after resize: content 900x600; toolbar 900x48 at (0,0), page 580x552 at (0,48), panel 320x552 at (580,48)
@@ -17,8 +18,11 @@ PASS hostile page cannot blind the detector: after the page replaced built-ins a
 PASS hostile page cannot drain the collector: page reported "found=1&drained=0" (found = collectors it could name)
 PASS forged frame messages cannot stall or corrupt collection: page learned the frame key and sent forged messages ("key=1&n=4207"); collection carried on: true
 PASS broken text cannot stop collection: storage key with a lone surrogate recorded as \u{fffd}bad: true; collection carried on: true
+PASS page cannot hide or fake who fingerprints: with the stack limit at 0, the tracker's own read named its script: true; a data: script naming an unloaded script credited to it: false, shown as unknown: true; a rewritten stack credited: false
 PASS made-up sites cannot hide a real new one: skipped: no IPv6 loopback on this machine
-PASS floods are reported, not hidden: 73826 events from the flood reported as not counted; 9004 distinct addresses kept
-PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:33925/hostile; the page's history.back called: false
+PASS floods are reported, not hidden: 73827 events from the flood reported as not counted; 9004 distinct addresses kept
+PASS Back cannot be trapped by the page: on localhost at /away, Back went to http://127.0.0.1:41085/hostile; the page's history.back called: false
 PASS a page brought back by Back is watched as its own site: report site went localhost (localhost) then 127.0.0.1; after Back the page called ["/after-back-restored"], all in the report: true
-selftest passed in 15.4s on linux (Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15)
+PASS history kept per site: on 127.0.0.1, last visit Some("2026-10-23 with 2000 other sites"); file holds 515 bytes for sites ["127.0.0.1", "localhost"]; no addresses, cookie names or made-up sites: true
+PASS only the panel can forget history: after the page called forget: ["127.0.0.1", "localhost"]; panel forgot localhost: true; then everything: true; still empty after the visit carried on: true
+selftest passed in 22.7s on linux (Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15)
