@@ -593,11 +593,27 @@ fn run_checks(
     let r = report(shared);
     let summary = r.summary();
     let seen = seen_tracker_paths(&r, tracker);
+    // Engines that mark page requests with Sec-Fetch-Mode mark every one.
+    // An unmarked request on such an engine was made by the engine itself
+    // (Edge's WebView2 sends one to the site root), not by the page; it is
+    // listed below, not counted as a miss.
+    let marks = tracker
+        .hits()
+        .iter()
+        .any(|h| h.how.contains("sec-fetch-mode="));
+    let engine_own: Vec<String> = tracker
+        .hits()
+        .iter()
+        .filter(|h| marks && !h.how.contains("sec-fetch-mode=") && !h.how.contains("upgrade="))
+        .map(|h| h.path.clone())
+        .collect();
     let mut missed: Vec<String> = tracker
         .hits()
         .iter()
         .map(|h| h.path.clone())
-        .filter(|p| !seen.contains(p) && !KNOWN_UNSEEN.contains(&p.as_str()))
+        .filter(|p| {
+            !seen.contains(p) && !KNOWN_UNSEEN.contains(&p.as_str()) && !engine_own.contains(p)
+        })
         .collect();
     missed.sort();
     missed.dedup();
@@ -606,10 +622,11 @@ fn run_checks(
         loaded && missed.is_empty(),
         if missed.is_empty() {
             format!(
-                "{} distinct tracker addresses seen: {}; known out of sight: {}",
+                "{} distinct tracker addresses seen: {}; known out of sight: {}; made by the engine itself: {}",
                 seen.len(),
                 seen.join(" "),
-                KNOWN_UNSEEN.join(" ")
+                KNOWN_UNSEEN.join(" "),
+                if engine_own.is_empty() { "none".to_string() } else { engine_own.join(" ") }
             )
         } else {
             let detail: Vec<String> = tracker
