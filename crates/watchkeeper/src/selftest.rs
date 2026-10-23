@@ -449,8 +449,12 @@ const HOSTILE_TRACKER_JS: &str = r#"(function () {
   fetch(T + '/h-collect', { mode: 'no-cors' });
   navigator.sendBeacon(T + '/h-beacon', 'b');
   try { new WebSocket(WS + '/h-ws'); } catch (e) { }
-  try { document.createElement('canvas').toDataURL(); } catch (e) { }
-  setTimeout(function () { fetch(T + '/h-done', { mode: 'no-cors' }); }, 300);
+  // A read made once the flood above has been collected, so it is not
+  // among what the flood pushes out. The stack limit is still 0.
+  setTimeout(function () {
+    try { document.createElement('canvas').toDataURL(); } catch (e) { }
+    setTimeout(function () { fetch(T + '/h-done', { mode: 'no-cors' }); }, 300);
+  }, 2000);
 })();
 "#;
 
@@ -979,7 +983,12 @@ fn run_checks(
         "page cannot hide or fake who fingerprints",
         done && real && !faked && unplaced && !rewritten,
         format!(
-            "with the stack limit at 0, the tracker's own read named its script: {real}; a data: script naming an unloaded script credited to it: {faked}, shown as unknown: {unplaced}; a rewritten stack credited: {rewritten}"
+            "with the stack limit at 0, the tracker's own read named its script: {real}; a data: script naming an unloaded script credited to it: {faked}, shown as unknown: {unplaced}; a rewritten stack credited: {rewritten}{}",
+            if real && !faked && unplaced && !rewritten {
+                String::new()
+            } else {
+                format!("; reads {reads:?}")
+            }
         ),
     ));
 
