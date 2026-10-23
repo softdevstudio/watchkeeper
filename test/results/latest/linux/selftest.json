@@ -1,0 +1,159 @@
+{
+  "os": "linux",
+  "arch": "x86_64",
+  "user_agent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/60.5 Safari/605.1.15",
+  "passed": true,
+  "checks": [
+    {
+      "name": "page loaded",
+      "pass": true,
+      "detail": "tracker received 10 requests"
+    },
+    {
+      "name": "layout at start",
+      "pass": true,
+      "detail": "content 1200x800; toolbar 1200x48 at (0,0), page 880x752 at (0,48), panel 320x752 at (880,48)"
+    },
+    {
+      "name": "every tracker request seen",
+      "pass": true,
+      "detail": "10 distinct tracker URLs seen: /beacon /collect /fp /frame-call /frame.html /late /pixel.gif /style.css /tracker.js /xhr"
+    },
+    {
+      "name": "sites told apart",
+      "pass": true,
+      "detail": "site 127.0.0.1 contacted [\"localhost\"]"
+    },
+    {
+      "name": "script cookies seen",
+      "pass": true,
+      "detail": "seen {\"wk_js\", \"wk_page\"}"
+    },
+    {
+      "name": "storage writes seen",
+      "pass": true,
+      "detail": "seen {(\"indexedDB\", \"wk_db\"), (\"localStorage\", \"direct_key\"), (\"localStorage\", \"wk_ls\"), (\"sessionStorage\", \"wk_ss\")}"
+    },
+    {
+      "name": "fingerprinting reads seen",
+      "pass": true,
+      "detail": "tracker reported \"canvas=1&webgl=1&audio=1&idb=1\"; seen {\"audio\", \"canvas\", \"webgl\"}"
+    },
+    {
+      "name": "server cookie read from the engine",
+      "pass": true,
+      "detail": "3 cookies in the store: wk_session@127.0.0.1 (HttpOnly), wk_page@127.0.0.1, wk_js@127.0.0.1"
+    },
+    {
+      "name": "page cannot call app commands",
+      "pass": true,
+      "detail": "IPC bridge present, snapshot command refused"
+    },
+    {
+      "name": "layout after resize",
+      "pass": true,
+      "detail": "content 900x600; toolbar 900x48 at (0,0), page 580x552 at (0,48), panel 320x552 at (580,48)"
+    }
+  ],
+  "summary": {
+    "site": "127.0.0.1",
+    "page_url": "http://127.0.0.1:36985/",
+    "third_party_sites": [
+      "localhost"
+    ],
+    "requests": 11,
+    "third_party_requests": 10,
+    "first_party_cookies": 3,
+    "third_party_cookies": 0,
+    "storage_writes": 4,
+    "fingerprinting": [
+      "audio",
+      "canvas",
+      "webgl"
+    ],
+    "dropped": 0
+  },
+  "tracker_hits": [
+    {
+      "path": "/style.css",
+      "query": ""
+    },
+    {
+      "path": "/tracker.js",
+      "query": ""
+    },
+    {
+      "path": "/collect",
+      "query": "id=1"
+    },
+    {
+      "path": "/xhr",
+      "query": ""
+    },
+    {
+      "path": "/pixel.gif",
+      "query": ""
+    },
+    {
+      "path": "/beacon",
+      "query": ""
+    },
+    {
+      "path": "/fp",
+      "query": "canvas=1&webgl=1&audio=1&idb=1"
+    },
+    {
+      "path": "/frame.html",
+      "query": ""
+    },
+    {
+      "path": "/frame-call",
+      "query": ""
+    },
+    {
+      "path": "/late",
+      "query": ""
+    }
+  ],
+  "site_hits": [
+    {
+      "path": "/",
+      "query": ""
+    },
+    {
+      "path": "/ipc",
+      "query": "denied=1"
+    }
+  ],
+  "detected_requests": [
+    "http://127.0.0.1:36985/ipc?denied=1",
+    "http://localhost:33529/beacon",
+    "http://localhost:33529/collect?id=1",
+    "http://localhost:33529/fp?canvas=1&webgl=1&audio=1&idb=1",
+    "http://localhost:33529/frame-call",
+    "http://localhost:33529/frame.html",
+    "http://localhost:33529/late",
+    "http://localhost:33529/pixel.gif",
+    "http://localhost:33529/style.css",
+    "http://localhost:33529/tracker.js",
+    "http://localhost:33529/xhr"
+  ],
+  "cookies": [
+    {
+      "name": "wk_session",
+      "domain": "127.0.0.1",
+      "http_only": true
+    },
+    {
+      "name": "wk_page",
+      "domain": "127.0.0.1",
+      "http_only": false
+    },
+    {
+      "name": "wk_js",
+      "domain": "127.0.0.1",
+      "http_only": false
+    }
+  ],
+  "seconds": 5.207512873
+}

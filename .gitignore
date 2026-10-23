@@ -1,0 +1,3 @@
+/target
+/crates/watchkeeper/gen/
+/selftest-out/

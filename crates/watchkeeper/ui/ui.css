@@ -1,0 +1,76 @@
+:root {
+  --bg: #f6f4ef;
+  --fg: #1b2433;
+  --muted: #5d6675;
+  --line: #d9d4c7;
+  --accent: #c8691f;
+  --field: #ffffff;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161c26;
+    --fg: #e9e6dd;
+    --muted: #9aa3b2;
+    --line: #2c3544;
+    --accent: #e08a3c;
+    --field: #0f141c;
+  }
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 100%;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.toolbar button {
+  width: 32px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--fg);
+  font-size: 15px;
+  cursor: pointer;
+}
+.toolbar form { flex: 1; display: flex; }
+.toolbar input {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+  color: var(--fg);
+  font: inherit;
+}
+.toolbar .error { color: var(--accent); font-size: 12px; white-space: nowrap; }
+
+/* Panel */
+.panel {
+  height: 100%;
+  overflow-y: auto;
+  padding: 14px 16px;
+  border-left: 1px solid var(--line);
+}
+.panel h1 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 4px; }
+.panel .site { font-size: 18px; font-weight: 600; word-break: break-all; margin-bottom: 14px; }
+.panel .big { font-size: 34px; font-weight: 700; color: var(--accent); line-height: 1; }
+.panel .label { color: var(--muted); margin-bottom: 14px; }
+.panel ul { list-style: none; margin: 0 0 14px; padding: 0; }
+.panel li { padding: 3px 0; border-bottom: 1px solid var(--line); word-break: break-all; }
+.panel .row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.panel .note { color: var(--muted); font-size: 12px; margin-top: 12px; }
