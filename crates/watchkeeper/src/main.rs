@@ -48,6 +48,9 @@ pub struct Shared {
     pub address: Mutex<String>,
     /// The per-site history kept between launches.
     pub recorder: Mutex<recorder::Recorder>,
+    /// Held while the history file is written, so writes happen one at a
+    /// time and a forget is never overwritten by an older copy.
+    pub saving: Mutex<()>,
 }
 
 /// What the toolbar and panel show.
@@ -96,11 +99,38 @@ impl Shared {
         }
     }
 
-    /// Writes the history file if it changed.
+    /// Writes the history file if it changed. The recorder is held only
+    /// to take a copy; the write happens without it.
     pub fn save_history(&self) {
-        if let Ok(mut r) = self.recorder.lock() {
-            r.save_if_dirty();
+        let Ok(_saving) = self.saving.lock() else {
+            return;
+        };
+        self.write_history();
+    }
+
+    fn write_history(&self) {
+        let job = self.recorder.lock().ok().and_then(|mut r| r.take_save());
+        if let Some((history, path)) = job {
+            if let Err(e) = history.save(&path) {
+                if let Ok(mut r) = self.recorder.lock() {
+                    r.save_failed(e);
+                }
+            }
         }
+    }
+
+    /// Forgets one site, or every site with None, and writes the file.
+    pub fn forget(&self, site: Option<&str>) {
+        let Ok(_saving) = self.saving.lock() else {
+            return;
+        };
+        if let Ok(mut r) = self.recorder.lock() {
+            match site {
+                Some(s) => r.forget(s),
+                None => r.forget_all(),
+            }
+        }
+        self.write_history();
     }
 }
 
@@ -242,17 +272,13 @@ fn snapshot(shared: tauri::State<'_, Arc<Shared>>) -> Snapshot {
 /// Forgets one site's history. Granted to the panel only.
 #[tauri::command]
 fn forget_site(shared: tauri::State<'_, Arc<Shared>>, site: String) {
-    if let Ok(mut r) = shared.recorder.lock() {
-        r.forget(&site);
-    }
+    shared.forget(Some(&site));
 }
 
 /// Forgets all history. Granted to the panel only.
 #[tauri::command]
 fn forget_all(shared: tauri::State<'_, Arc<Shared>>) {
-    if let Ok(mut r) = shared.recorder.lock() {
-        r.forget_all();
-    }
+    shared.forget(None);
 }
 
 /// Where the history file lives, or None with `--no-history`.
@@ -413,6 +439,7 @@ fn main() {
         keys,
         address: Mutex::new(String::new()),
         recorder: Mutex::new(recorder::Recorder::new(None)),
+        saving: Mutex::new(()),
     });
 
     let state = shared.clone();

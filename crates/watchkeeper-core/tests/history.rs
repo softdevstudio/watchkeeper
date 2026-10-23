@@ -1,5 +1,6 @@
 use watchkeeper_core::history::{
-    date_from_days, History, Visit, MAX_HISTORY_SITES, MAX_NAMES_PER_VISIT, MAX_VISITS,
+    date_from_days, History, Visit, MAX_HISTORY_BYTES, MAX_HISTORY_SITES, MAX_NAMES_PER_VISIT,
+    MAX_NAME_BYTES, MAX_VISITS,
 };
 
 fn visit(date: &str, sites: &[&str]) -> Visit {
@@ -128,6 +129,60 @@ fn damaged_file_is_set_aside() {
     let (h, note) = History::load(&p);
     assert!(h.sites.is_empty());
     assert!(note.unwrap().contains("damaged"));
-    assert!(d.join("history.json.bad").exists());
+    let aside: Vec<_> = std::fs::read_dir(&d)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.starts_with("history.json.bad-"))
+        .collect();
+    assert_eq!(
+        aside.len(),
+        1,
+        "set aside under a name of its own: {aside:?}"
+    );
     assert!(!p.exists());
+    // A save cut short leaves a temporary file; loading clears it.
+    std::fs::write(d.join("history.json.tmp"), "partial").unwrap();
+    let _ = History::load(&p);
+    assert!(!d.join("history.json.tmp").exists());
+}
+
+#[test]
+fn size_stays_within_budget() {
+    let long = "x".repeat(MAX_NAME_BYTES + 1);
+    let mut h = History::new();
+    h.push("a.com", visit("2026-01-01", &[&long, "ok.net"]));
+    assert_eq!(
+        h.sites["a.com"][0].other_sites,
+        vec!["ok.net"],
+        "overlong names dropped"
+    );
+    h.push(&long, visit("2026-01-01", &[]));
+    assert!(!h.sites.contains_key(&long));
+    // Visits full of the longest names, far past the budget.
+    let names: Vec<String> = (0..MAX_NAMES_PER_VISIT)
+        .map(|i| format!("{i}{}", "n".repeat(240)))
+        .collect();
+    let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+    for i in 0..200 {
+        let date = format!("2026-{:02}-{:02}", i % 12 + 1, i % 28 + 1);
+        h.push(&format!("site{i}.com"), visit(&date, &refs));
+    }
+    assert!(h.approx_bytes() <= MAX_HISTORY_BYTES);
+    assert!(
+        h.sites.len() > 50,
+        "only the oldest go: {} left",
+        h.sites.len()
+    );
+    let d = dir();
+    let p = d.join("history.json");
+    h.save(&p).unwrap();
+    let size = std::fs::metadata(&p).unwrap().len() as usize;
+    assert!(
+        size <= MAX_HISTORY_BYTES + MAX_HISTORY_BYTES / 10,
+        "file is {size} bytes"
+    );
+    let (back, note) = History::load(&p);
+    assert!(note.is_none());
+    assert_eq!(back.sites.len(), h.sites.len());
 }

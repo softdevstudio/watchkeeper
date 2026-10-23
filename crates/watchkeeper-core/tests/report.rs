@@ -335,11 +335,18 @@ fn fingerprinting_credited_to_a_loaded_script_only() {
     let fp = |a: &str, u: &str| {
         format!(r#"{{"k":"fp","a":"{a}","o":"https://www.news.example.com","u":"{u}"}}"#)
     };
+    let confirmed = |u: &str| {
+        format!(
+            r#"{{"k":"res","o":"https://www.news.example.com","u":"{u}","t":"script","c":"1"}}"#
+        )
+    };
     let evs = [
         // The read comes before the engine lists the script: still credited.
         fp("canvas", "https://fp.tracker.net/f.js"),
-        req("https://fp.tracker.net/f.js", "script"),
-        // A script address the page never loaded: credited to the page.
+        confirmed("https://fp.tracker.net/f.js"),
+        // A script address the page only named in a call that went
+        // nowhere: credited to the page.
+        req("https://innocent.org/lib.js", "xhr"),
         fp("webgl", "https://innocent.org/lib.js"),
         // No address (inline script): credited to the page.
         fp("audio", ""),
@@ -361,9 +368,11 @@ fn fingerprinting_credited_to_a_loaded_script_only() {
             "webgl by example.com"
         ]
     );
-    assert!(!s
-        .report
-        .summary()
-        .third_party_sites
-        .contains(&"innocent.org".to_string()));
+    let sum = s.report.summary();
+    assert!(sum.third_party_sites.contains(&"innocent.org".to_string()));
+    assert_eq!(
+        sum.confirmed_sites,
+        vec!["tracker.net"],
+        "only what the engine saw"
+    );
 }

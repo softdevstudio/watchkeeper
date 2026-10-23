@@ -222,6 +222,13 @@ pub struct SiteReport {
     /// go nowhere; it cannot fake the engine's own list.
     #[serde(skip)]
     confirmed_extra: usize,
+    /// Other sites the engine's own resource list showed being contacted.
+    /// Only these are kept between visits.
+    pub confirmed_sites: BTreeSet<String>,
+    /// Script addresses the engine's own resource list showed being
+    /// loaded. A fingerprinting read is credited to a script's site only
+    /// when its address is here.
+    pub confirmed_scripts: BTreeSet<String>,
     /// Addresses kept per host.
     #[serde(skip)]
     per_host: std::collections::HashMap<String, usize>,
@@ -263,6 +270,8 @@ pub struct Summary {
     pub fingerprinting: Vec<String>,
     /// The same, with the site whose script made each read.
     pub fingerprinting_by: Vec<FingerprintRead>,
+    /// Other sites the engine itself saw contacted.
+    pub confirmed_sites: Vec<String>,
     /// Workers started (their own traffic is not visible).
     pub workers: usize,
     /// Events that could not be counted.
@@ -305,6 +314,17 @@ impl SiteReport {
                         || site_of_url(&o)
                             .is_some_and(|s| !s.is_empty() && s != self.site && s == site));
                 let c = if confirmed { "1" } else { "" };
+                if confirmed {
+                    if site != self.site
+                        && !site.is_empty()
+                        && self.confirmed_sites.len() < MAX_SITES * 2
+                    {
+                        self.confirmed_sites.insert(site.clone());
+                    }
+                    if t == "script" && self.confirmed_scripts.len() < MAX_ADDRESSES {
+                        self.confirmed_scripts.insert(clip(&u));
+                    }
+                }
                 if site != self.site && !self.other_sites.contains(&site) {
                     if self.other_sites.len() < MAX_SITES {
                         self.other_sites.insert(site);
@@ -379,12 +399,13 @@ impl SiteReport {
 
     /// Each fingerprinting read with the site whose script made it. The
     /// script's address comes from the engine's stack, which a page can
-    /// bend on some engines, so it counts only when the page really
-    /// requested that address; otherwise the read goes to the frame's site.
+    /// bend on some engines, so it counts only when the engine's own
+    /// resource list showed that script being loaded; otherwise the read
+    /// goes to the frame's site.
     pub fn fingerprinting_by(&self) -> Vec<FingerprintRead> {
         let mut out = BTreeSet::new();
         for (api, script, frame) in &self.fingerprint_reads {
-            let by = if !script.is_empty() && self.requests.contains_key(script) {
+            let by = if !script.is_empty() && self.confirmed_scripts.contains(script) {
                 site_of_url(script).filter(|s| !s.is_empty())
             } else {
                 None
@@ -445,6 +466,7 @@ impl SiteReport {
                 .count(),
             fingerprinting: self.fingerprinting.iter().cloned().collect(),
             fingerprinting_by: self.fingerprinting_by(),
+            confirmed_sites: self.confirmed_sites.iter().cloned().collect(),
             workers: self
                 .requests
                 .values()

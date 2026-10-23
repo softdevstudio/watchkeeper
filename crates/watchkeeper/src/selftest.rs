@@ -212,7 +212,10 @@ fn respond(role: Role, path: &str, other: &str) -> Response {
         }
         (Role::Site, "/hostile") => html(hostile_page(other)),
         (Role::Site, "/frame-same") => html(
-            "<!doctype html><title>same-site frame</title><script>fetch('/same-call');</script>"
+            "<!doctype html><title>same-site frame</title><script>\
+             try { var T = parent.TRK; Error.prepareStackTrace = function () { return 'Error\\n    at x (' + T + '/h-tracker.js:1:1)'; }; \
+             var A = window.OfflineAudioContext || window.webkitOfflineAudioContext; if (A) new A(1, 44100, 44100); } catch (e) { }\
+             fetch('/same-call');</script>"
                 .into(),
         ),
         (Role::Tracker, "/away") => html(
@@ -334,6 +337,13 @@ fn hostile_page(tracker: &str) -> String {
 <html><head><meta charset="utf-8"><title>Hostile page</title></head>
 <body><h1>Hostile page</h1>
 <script>
+  // Hide every caller's address, and name a script that never loads.
+  window.TRK = '{tracker}';
+  Error.stackTraceLimit = 0;
+  try {{ var hx = new XMLHttpRequest(); hx.open('GET', '{tracker}/h-fake.js'); }} catch (e) {{ }}
+</script>
+<script src="data:text/javascript,document.createElement('canvas').toDataURL();//{tracker}/h-fake.js"></script>
+<script>
 (function () {{
   // Coming back here with Back must still be visible.
   window.addEventListener('pageshow', function (e) {{
@@ -439,6 +449,7 @@ const HOSTILE_TRACKER_JS: &str = r#"(function () {
   fetch(T + '/h-collect', { mode: 'no-cors' });
   navigator.sendBeacon(T + '/h-beacon', 'b');
   try { new WebSocket(WS + '/h-ws'); } catch (e) { }
+  try { document.createElement('canvas').toDataURL(); } catch (e) { }
   setTimeout(function () { fetch(T + '/h-done', { mode: 'no-cors' }); }, 300);
 })();
 "#;
@@ -951,6 +962,25 @@ fn run_checks(
         format!("storage key with a lone surrogate recorded as \\u{{fffd}}bad: {fffd}; collection carried on: {}", missing.is_empty()),
     ));
 
+    // Attribution under attack: the page set Error.stackTraceLimit to 0,
+    // named a script it never loaded from a data: script, and had a frame
+    // rewrite its stacks to name the tracker's real script.
+    let reads: Vec<(String, String, String)> = r.fingerprint_reads.iter().cloned().collect();
+    let real = reads
+        .iter()
+        .any(|(a, u, _)| a == "canvas" && u.ends_with("/h-tracker.js"));
+    let faked = reads.iter().any(|(_, u, _)| u.ends_with("/h-fake.js"));
+    let rewritten = reads
+        .iter()
+        .any(|(a, u, _)| a == "audio" && u.ends_with("/h-tracker.js"));
+    checks.push(check(
+        "page cannot hide or fake who fingerprints",
+        done && real && !faked && !rewritten,
+        format!(
+            "with the stack limit at 0, the tracker's own read named its script: {real}; a data: script naming an unloaded script credited to it: {faked}; a rewritten stack credited: {rewritten}"
+        ),
+    ));
+
     let v6_hit = tracker.has("/sf-pixel.gif");
     let v6_listed = r.other_sites.iter().any(|s| s == "[::1]");
     checks.push(check(
@@ -1095,7 +1125,11 @@ fn check_history(app: &AppHandle, shared: &Shared) -> Vec<Check> {
     let text = std::fs::read_to_string(&path).unwrap_or_default();
     let sites = history_sites(&path);
     let last = snap.last_visit.clone();
-    let names_only = !text.is_empty() && !text.contains('/') && !text.contains("wk_");
+    // The hostile page named over 2,000 made-up sites in calls that went
+    // nowhere; only sites the engine saw contacted are kept, so the file
+    // stays small.
+    let names_only =
+        !text.is_empty() && !text.contains('/') && !text.contains("wk_") && text.len() < 20_000;
     checks.push(check(
         "history kept per site",
         snap.summary.site == "127.0.0.1"
@@ -1104,7 +1138,7 @@ fn check_history(app: &AppHandle, shared: &Shared) -> Vec<Check> {
             && sites.contains(&"localhost".to_string())
             && names_only,
         format!(
-            "on {}, last visit {:?}; file holds {} bytes for sites {sites:?}; no addresses or cookie names: {names_only}",
+            "on {}, last visit {:?}; file holds {} bytes for sites {sites:?}; no addresses, cookie names or made-up sites: {names_only}",
             snap.summary.site,
             last.map(|l| format!("{} with {} other sites", l.date, l.other_site_count)),
             text.len()

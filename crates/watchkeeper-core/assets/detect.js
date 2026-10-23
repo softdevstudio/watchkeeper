@@ -40,6 +40,7 @@
   var S_fromCharCode = String.fromCharCode;
   var S_charCodeAt = String.prototype.charCodeAt;
   var S_indexOf = String.prototype.indexOf;
+  var S_lastIndexOf = String.prototype.lastIndexOf;
   var S_slice = String.prototype.slice;
   var M_random = Math.random;
   var M_floor = Math.floor;
@@ -291,35 +292,86 @@
     if (!once('s ' + kind + ' ' + n)) return;
     submit('store', kind, n, '');
   }
-  // Which script made a call: the first web address in a fresh call
-  // stack. This script itself has none, so the first one found is the
-  // caller's. A page can blur this (V8 lets it reformat stacks), but only
-  // for its own calls; an empty answer falls back to the frame's site.
-  function callerScript() {
+  // Which script made a call, from a fresh call stack. Each stack line is
+  // read at the place the engine puts the frame's address: after "at " or
+  // inside "( )" in V8, after "@" in JavaScriptCore. Frames with no
+  // address (this script, native code, eval) are passed over; a data: or
+  // blob: frame ends the search with no answer, since such a script has no
+  // site of its own. An empty answer means the frame's site. The Rust side
+  // also credits a script's site only when the engine loaded that script.
+  function own(o, k) {
+    try { var d = o && R_getOwnPropertyDescriptor(o, k); return d ? d.value : undefined; } catch (e) { return undefined; }
+  }
+  // V8 formats stacks with any Error.prepareStackTrace data property found
+  // on Error or up its prototype chain. A page that sets one could write
+  // any stack it likes, so then the answer is unknown.
+  function prepNow() {
+    var o = E_Error;
+    for (var i = 0; o && i < 8; i++) {
+      var d = null;
+      try { d = R_getOwnPropertyDescriptor(o, 'prepareStackTrace'); } catch (e) { return null; }
+      if (d) return own(d, 'value');
+      try { o = R_getPrototypeOf(o); } catch (e) { return null; }
+    }
+    return undefined;
+  }
+  var E_prep0 = prepNow();
+  function stackNow() {
+    if (prepNow() !== E_prep0) return '';
+    // A page can lower Error.stackTraceLimit to hide every caller; raise
+    // it for this one capture and put the page's value back.
+    var d = null, lim;
+    try { d = R_getOwnPropertyDescriptor(E_Error, 'stackTraceLimit'); } catch (e) { d = null; }
+    var raise = d && own(d, 'writable') === true && typeof (lim = own(d, 'value')) === 'number' && lim < 40;
+    if (raise) { try { E_Error.stackTraceLimit = 40; } catch (e) { raise = false; } }
     var st = '';
-    try { st = new E_Error().stack; } catch (e) { return ''; }
-    if (typeof st !== 'string') return '';
-    var at = idx(st, 'http');
-    while (at >= 0) {
-      var end = at;
-      while (end < st.length) {
-        var ch = call(S_charCodeAt, st, [end]);
-        if (ch <= 32 || ch === 41 || ch === 40) break; // space, ( and )
-        end++;
+    try { st = new E_Error().stack; } catch (e) { st = ''; }
+    if (raise) { try { E_Error.stackTraceLimit = lim; } catch (e) { } }
+    return typeof st === 'string' ? st : '';
+  }
+  function starts(s, p) { return call(S_slice, s, [0, p.length]) === p; }
+  function frameAddress(line) {
+    var t = trim(line);
+    var a;
+    if (starts(t, 'at ')) {
+      t = call(S_slice, t, [3]);
+      a = t;
+      if (t.length && call(S_charCodeAt, t, [t.length - 1]) === 41) {
+        // The group of brackets that closes the line, matched from the
+        // end, so a function name holding brackets cannot pose as one.
+        var depth = 0;
+        for (var i = t.length - 1; i >= 0; i--) {
+          var ch = call(S_charCodeAt, t, [i]);
+          if (ch === 41) depth++;
+          else if (ch === 40 && --depth === 0) { a = call(S_slice, t, [i + 1, t.length - 1]); break; }
+        }
       }
-      var u = call(S_slice, st, [at, end]);
+    } else {
+      // The last @, so a function name holding one cannot pose as an address.
+      var at = call(S_lastIndexOf, t, ['@']);
+      a = at >= 0 ? call(S_slice, t, [at + 1]) : t;
+    }
+    return a;
+  }
+  function callerScript() {
+    var st = stackNow();
+    var pos = 0;
+    for (var n = 0; pos < st.length && n < 64; n++) {
+      var nl = call(S_indexOf, st, ['\n', pos]);
+      if (nl < 0) nl = st.length;
+      var a = frameAddress(call(S_slice, st, [pos, nl]));
+      pos = nl + 1;
+      if (starts(a, 'data:') || starts(a, 'blob:')) return '';
+      if (!starts(a, 'http://') && !starts(a, 'https://')) continue;
       // Drop the :line:column at the end.
-      var k = u.length;
+      var k = a.length;
       for (var pass = 0; pass < 2; pass++) {
         var j = k;
-        while (j > 0) { var d = call(S_charCodeAt, u, [j - 1]); if (d < 48 || d > 57) break; j--; }
-        if (j < k && j > 0 && call(S_charCodeAt, u, [j - 1]) === 58) k = j - 1; else break;
+        while (j > 0) { var c = call(S_charCodeAt, a, [j - 1]); if (c < 48 || c > 57) break; j--; }
+        if (j < k && j > 0 && call(S_charCodeAt, a, [j - 1]) === 58) k = j - 1; else break;
       }
-      var cl = clean(call(S_slice, u, [0, k]));
-      if (cl) return cl.url;
-      var rest = call(S_slice, st, [end]);
-      var nx = idx(rest, 'http');
-      at = nx < 0 ? -1 : end + nx;
+      var cl = clean(call(S_slice, a, [0, k]));
+      return cl ? cl.url : '';
     }
     return '';
   }

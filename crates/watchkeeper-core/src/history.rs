@@ -21,7 +21,12 @@ pub const MAX_VISITS: usize = 20;
 pub const MAX_HISTORY_SITES: usize = 2_000;
 /// Other-site names kept per visit.
 pub const MAX_NAMES_PER_VISIT: usize = 300;
-/// Largest history file read, in bytes.
+/// Longest site name kept, in bytes (the longest a domain name can be).
+pub const MAX_NAME_BYTES: usize = 253;
+/// Size the history is kept under when saved, in bytes (roughly). The
+/// visits made longest ago go first.
+pub const MAX_HISTORY_BYTES: usize = 8 << 20;
+/// Largest history file read, in bytes. Well above what is ever saved.
 pub const MAX_FILE_BYTES: u64 = 32 << 20;
 
 /// One visit to a site.
@@ -31,7 +36,9 @@ pub struct Visit {
     pub date: String,
     /// How many other sites the page contacted.
     pub other_site_count: usize,
-    /// Their names (at most MAX_NAMES_PER_VISIT).
+    /// Names of the other sites the engine itself saw contacted (at most
+    /// MAX_NAMES_PER_VISIT). Names a page only used in calls that went
+    /// nowhere are not kept.
     pub other_sites: Vec<String>,
     pub cookies: usize,
     pub storage_writes: usize,
@@ -46,8 +53,9 @@ impl Visit {
             date: date.to_string(),
             other_site_count: s.third_party_sites.len(),
             other_sites: s
-                .third_party_sites
+                .confirmed_sites
                 .iter()
+                .filter(|n| n.len() <= MAX_NAME_BYTES)
                 .take(MAX_NAMES_PER_VISIT)
                 .cloned()
                 .collect(),
@@ -56,6 +64,7 @@ impl Visit {
             fingerprinting: s
                 .fingerprinting_by
                 .iter()
+                .filter(|f| f.api.len() <= 16 && f.by.len() <= MAX_NAME_BYTES)
                 .take(64)
                 .map(|f| format!("{} by {}", f.api, f.by))
                 .collect(),
@@ -91,13 +100,22 @@ impl History {
     /// file that cannot be read is renamed to `<name>.bad` and an empty
     /// history is returned along with a note saying so.
     pub fn load(path: &Path) -> (History, Option<String>) {
+        // A save cut short leaves its temporary file behind.
+        let mut tmp = path.as_os_str().to_owned();
+        tmp.push(".tmp");
+        let _ = std::fs::remove_file(PathBuf::from(tmp));
         let meta = match std::fs::metadata(path) {
             Ok(m) => m,
             Err(_) => return (History::new(), None),
         };
         let bad = |why: String| {
+            // A name of its own, so an earlier copy set aside is kept.
             let mut aside = path.as_os_str().to_owned();
-            aside.push(".bad");
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            aside.push(format!(".bad-{secs}"));
             let _ = std::fs::rename(path, PathBuf::from(aside));
             (History::new(), Some(why))
         };
@@ -125,6 +143,7 @@ impl History {
     }
 
     /// Writes the file: to `<name>.tmp` first, then renamed over the old.
+    /// Call `trim` first to keep it within MAX_HISTORY_BYTES.
     pub fn save(&self, path: &Path) -> std::io::Result<()> {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -192,15 +211,64 @@ impl History {
         self.sites.clear();
     }
 
-    /// Keeps within the limits, dropping the sites visited longest ago.
-    fn trim(&mut self) {
+    /// Roughly how many bytes the saved file takes.
+    pub fn approx_bytes(&self) -> usize {
+        self.sites
+            .iter()
+            .map(|(k, v)| {
+                k.len()
+                    + 8
+                    + v.iter()
+                        .map(|x| {
+                            120 + x.other_sites.iter().map(|n| n.len() + 3).sum::<usize>()
+                                + x.fingerprinting.iter().map(|n| n.len() + 3).sum::<usize>()
+                        })
+                        .sum::<usize>()
+            })
+            .sum()
+    }
+
+    /// Keeps within the limits: visits per site, names per visit, sites,
+    /// and the size budget, dropping what was visited longest ago.
+    pub fn trim(&mut self) {
         for v in self.sites.values_mut() {
             while v.len() > MAX_VISITS {
                 v.pop_front();
             }
             for visit in v.iter_mut() {
+                visit.other_sites.retain(|n| n.len() <= MAX_NAME_BYTES);
                 visit.other_sites.truncate(MAX_NAMES_PER_VISIT);
+                visit
+                    .fingerprinting
+                    .retain(|n| n.len() <= MAX_NAME_BYTES + 20);
                 visit.fingerprinting.truncate(64);
+            }
+        }
+        self.sites.retain(|k, _| k.len() <= MAX_NAME_BYTES);
+        let mut size = self.approx_bytes();
+        while size > MAX_HISTORY_BYTES {
+            // The site whose oldest visit is oldest gives that visit up.
+            let Some(key) = self
+                .sites
+                .iter()
+                .filter_map(|(k, v)| v.front().map(|x| (x.date.clone(), k.clone())))
+                .min()
+                .map(|(_, k)| k)
+            else {
+                break;
+            };
+            let Some(v) = self.sites.get_mut(&key) else {
+                break;
+            };
+            if let Some(x) = v.pop_front() {
+                size = size.saturating_sub(
+                    120 + x.other_sites.iter().map(|n| n.len() + 3).sum::<usize>()
+                        + x.fingerprinting.iter().map(|n| n.len() + 3).sum::<usize>(),
+                );
+            }
+            if v.is_empty() {
+                self.sites.remove(&key);
+                size = size.saturating_sub(key.len() + 8);
             }
         }
         self.sites.retain(|k, v| !k.is_empty() && !v.is_empty());

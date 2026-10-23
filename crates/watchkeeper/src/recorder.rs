@@ -80,15 +80,30 @@ impl Recorder {
         self.history.compare(site)
     }
 
-    /// Writes the file if something changed.
-    pub fn save_if_dirty(&mut self) {
+    /// When something changed: a copy of the history, trimmed to its
+    /// limits, and where to write it. Writing can then happen without
+    /// holding this recorder, so the panel never waits on the disk.
+    pub fn take_save(&mut self) -> Option<(History, PathBuf)> {
         if !self.dirty {
-            return;
+            return None;
         }
-        if let Some(p) = &self.path {
-            match self.history.save(p) {
-                Ok(()) => self.dirty = false,
-                Err(e) => self.note = Some(format!("history could not be saved: {e}")),
+        let path = self.path.clone()?;
+        self.history.trim();
+        self.dirty = false;
+        Some((self.history.clone(), path))
+    }
+
+    /// Notes a failed write; the next round tries again.
+    pub fn save_failed(&mut self, e: std::io::Error) {
+        self.dirty = true;
+        self.note = Some(format!("history could not be saved: {e}"));
+    }
+
+    /// Writes the file if something changed, holding the recorder.
+    pub fn save_if_dirty(&mut self) {
+        if let Some((h, p)) = self.take_save() {
+            if let Err(e) = h.save(&p) {
+                self.save_failed(e);
             }
         }
     }
@@ -102,7 +117,6 @@ impl Recorder {
             }
         }
         self.dirty = true;
-        self.save_if_dirty();
     }
 
     /// Forgets everything, including the visit in progress.
@@ -113,7 +127,6 @@ impl Recorder {
             self.suppressed = Some(cur);
         }
         self.dirty = true;
-        self.save_if_dirty();
     }
 
     pub fn path(&self) -> Option<&std::path::Path> {
@@ -129,6 +142,7 @@ mod tests {
         Summary {
             site: site.into(),
             third_party_sites: others.iter().map(|s| s.to_string()).collect(),
+            confirmed_sites: others.iter().map(|s| s.to_string()).collect(),
             ..Default::default()
         }
     }
@@ -192,6 +206,7 @@ mod tests {
         r.observe(&summary("a.com", &["t.net"]), 1);
         r.observe(&summary("b.com", &["t.net"]), 2);
         r.forget("b.com");
+        r.save_if_dirty();
         r.observe(&summary("b.com", &["t.net", "u.net"]), 2);
         assert!(!r.history.sites.contains_key("b.com"));
         assert!(History::load(&p).0.sites.contains_key("a.com"));
