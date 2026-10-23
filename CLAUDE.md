@@ -103,4 +103,4 @@ October 23, 2026, session 3 (version 0.2) done, at YK's word "Go on":
 
 ## Next
 
-Nothing approved beyond session 3. Waiting for YK. Plan items 4 (0.3: Report export) and 5 (site) remain.
+October 23, 2026: YK approved session 4 ("Go"): version 0.3, a Report button exporting a single-file HTML and a JSON of everything seen on a site. Plan item 5 (site) remains, not yet approved.

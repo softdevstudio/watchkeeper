@@ -11,6 +11,7 @@ fn main() {
             "snapshot",
             "forget_site",
             "forget_all",
+            "save_report",
         ]),
     ))
     .expect("tauri build step failed");

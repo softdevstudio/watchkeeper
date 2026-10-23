@@ -29,6 +29,16 @@ If a page does more than Watchkeeper can count, the panel says how much it left 
 
 Watchkeeper records names and addresses without query strings, never values. It does not keep cookie contents, storage contents or anything you type. The page's full address is shown in the address bar and nowhere else.
 
+## Saving a report
+
+**Save report** in the panel writes two files about the site in the window to your Downloads folder: an HTML page you can open in any browser and a JSON file for tools. Both are named after the site and the time, for example `watchkeeper-example.com-2026-10-23-140805.html`, and an existing file is never overwritten.
+
+A report holds everything the panel counts, in full: each other site told about the visit with every address on it and how it was reached, the cookies in the session's store and whom they belong to, cookie names written by scripts, storage writes, fingerprinting reads and who made them, workers started, how much the page did that could not be counted, the last visit when history is kept, and what Watchkeeper cannot see. Like everything else in Watchkeeper it has names and addresses without query strings, never cookie or storage values.
+
+Everything in a report came from the page, so the HTML shows it all as plain text. It has no scripts and no links, and it tells the browser that opens it to load nothing at all. Only Watchkeeper's own panel can save a report; a web page cannot.
+
+The JSON starts with `"format": "watchkeeper-report"` and a `format_version`, so tools can tell what they are reading.
+
 ## Your session
 
 The page runs in a private session that starts empty every time you open Watchkeeper and is deleted when you close it. No saved logins, no cookies, no browsing history carried over.
@@ -92,7 +102,8 @@ This runs the real app against local test sites. A page on `127.0.0.1` pulls in 
 1. An ordinary page. The tracker loads a script, a stylesheet, a pixel and an iframe, calls fetch, XMLHttpRequest, a beacon and two WebSockets, sets cookies, writes storage (also from inside its iframe), reads canvas, WebGL and audio, starts a worker and makes a call after a delay. Every request the tracker server saw must be in the report, except the one made from inside the worker. Wrapped classes must behave like the originals, the layout must tile the window before and after a resize, and the page must not be able to call app commands.
 2. A hostile page. It looks for the collector and tries to drain it, learns the sub-frame key and sends 4,200 forged messages (broken text, wrong types, oversized names and made-up "confirmed" sites), has a sandboxed frame claim 4,200 more "confirmed" sites, writes a storage key containing a broken character, floods 8,000 addresses, 300 cookies, 2,100 made-up sites and 61,000 calls that go nowhere, replaces JSON, URL, Reflect and several string and array functions, then loads a tracker and contacts a real new site. Every tracker address and the new site must still be seen, nothing may be drained, and the flood must show as left out.
 3. Back. From a page on another site that replaced `history.back`, Watchkeeper's Back must go back without calling it, and the page the engine brings back from its cache must be watched as its own site again, with what it does after coming back in the report.
-4. Last visit. Back on `127.0.0.1` for the second time, the panel must show the first visit. The history file must hold both sites, no addresses or cookie names, and none of the made-up sites from the hostile page. The page then tries to forget everything, which must change nothing; the panel forgets `localhost`, then everything, and the visit in progress must not come back.
+4. Reports. After the ordinary page and again after the hostile one, the page tries to save a report (nothing may appear), then the panel saves one. The JSON must parse and list every tracker address the servers saw that the report holds, and the HTML must hold no script or image elements and no links, even though the hostile page writes a storage key built to break it open.
+5. Last visit. Back on `127.0.0.1` for the second time, the panel must show the first visit. The history file must hold both sites, no addresses or cookie names, and none of the made-up sites from the hostile page. The page then tries to forget everything, which must change nothing; the panel forgets `localhost`, then everything, and the visit in progress must not come back.
 
 The ordinary page's canvas, WebGL and audio reads are made by the tracker's script, so each must be credited to `localhost`, not to the page. The hostile page also attacks this: it sets the stack depth to zero before the tracker's script runs, names a script it never loads from inside a `data:` script, and has a frame rewrite its stacks to name the tracker's real script. The tracker's read must still name its script, and neither fake may be credited.
 

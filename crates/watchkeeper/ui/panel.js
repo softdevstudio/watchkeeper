@@ -20,7 +20,9 @@
     var key = JSON.stringify(s);
     if (key === last) return;
     last = key;
+    if (s.site !== site) document.getElementById('report-note').hidden = true;
     site = s.site;
+    document.getElementById('report-row').hidden = !s.site;
     set('site', s.site || 'No page yet');
     document.getElementById('hint').hidden = !!s.site;
     set('sites', s.third_party_sites.length);
@@ -61,6 +63,17 @@
     n.hidden = !s.history_note;
     n.textContent = s.history_note || '';
   }
+
+  document.getElementById('save-report').addEventListener('click', function () {
+    var note = document.getElementById('report-note');
+    note.hidden = false;
+    note.textContent = 'Saving...';
+    invoke('save_report').then(function (r) {
+      note.textContent = 'Saved ' + r.html + ' and ' + r.json + ' in ' + r.folder + '.';
+    }, function (e) {
+      note.textContent = 'Not saved: ' + String(e);
+    });
+  });
 
   document.getElementById('forget-site').addEventListener('click', function () {
     if (site) invoke('forget_site', { site: site }).catch(function () { });

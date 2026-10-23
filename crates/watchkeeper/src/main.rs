@@ -51,6 +51,17 @@ pub struct Shared {
     /// Held while the history file is written, so writes happen one at a
     /// time and a forget is never overwritten by an older copy.
     pub saving: Mutex<()>,
+    /// Where saved reports go: the Downloads folder, or the self-test's
+    /// own folder in a self-test.
+    pub report_dir: Mutex<Option<std::path::PathBuf>>,
+}
+
+/// Where a report was saved, for the panel.
+#[derive(serde::Serialize)]
+pub struct Saved {
+    pub folder: String,
+    pub html: String,
+    pub json: String,
 }
 
 /// What the toolbar and panel show.
@@ -117,6 +128,53 @@ impl Shared {
                 }
             }
         }
+    }
+
+    /// Saves a report of the site in the window as HTML and JSON.
+    pub fn save_report(&self) -> Result<Saved, String> {
+        let (report, visit) = self
+            .session
+            .lock()
+            .map(|s| (s.report.clone(), s.visit()))
+            .map_err(|_| "the report is busy".to_string())?;
+        if report.site.is_empty() {
+            return Err("there is no page to report on yet".into());
+        }
+        let last = self
+            .recorder
+            .lock()
+            .ok()
+            .and_then(|r| r.compare(&report.site, visit));
+        let dir = self
+            .report_dir
+            .lock()
+            .ok()
+            .and_then(|d| d.clone())
+            .ok_or("no folder to save in")?;
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let r = watchkeeper_core::report::Report::new(
+            &report,
+            last,
+            env!("CARGO_PKG_VERSION"),
+            &format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+            secs,
+        );
+        let stem = watchkeeper_core::report::file_stem(&r.site, secs);
+        let (h, j) = watchkeeper_core::report::write_files(&dir, &r, &stem)
+            .map_err(|e| format!("could not save the report: {e}"))?;
+        let name = |p: &std::path::Path| {
+            p.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
+        };
+        Ok(Saved {
+            folder: dir.to_string_lossy().to_string(),
+            html: name(&h),
+            json: name(&j),
+        })
     }
 
     /// Forgets one site, or every site with None, and writes the file.
@@ -281,6 +339,12 @@ fn forget_all(shared: tauri::State<'_, Arc<Shared>>) {
     shared.forget(None);
 }
 
+/// Saves a report of the site in the window. Granted to the panel only.
+#[tauri::command]
+async fn save_report(shared: tauri::State<'_, Arc<Shared>>) -> Result<Saved, String> {
+    shared.save_report()
+}
+
 /// Where the history file lives, or None with `--no-history`.
 fn history_path(app: &AppHandle) -> Option<std::path::PathBuf> {
     if std::env::args().any(|a| a == "--no-history") {
@@ -440,6 +504,7 @@ fn main() {
         address: Mutex::new(String::new()),
         recorder: Mutex::new(recorder::Recorder::new(None)),
         saving: Mutex::new(()),
+        report_dir: Mutex::new(None),
     });
 
     let state = shared.clone();
@@ -453,7 +518,8 @@ fn main() {
             reload,
             snapshot,
             forget_site,
-            forget_all
+            forget_all,
+            save_report
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -469,6 +535,19 @@ fn main() {
             };
             if let Ok(mut r) = shared.recorder.lock() {
                 *r = recorder::Recorder::new(path);
+            }
+            // Reports go to Downloads, or the app's data folder when there
+            // is none; the self-test keeps them in its own folder.
+            let reports = match &selftest_dir {
+                Some(dir) => Some(dir.join("reports")),
+                None => handle
+                    .path()
+                    .download_dir()
+                    .ok()
+                    .or_else(|| handle.path().app_data_dir().ok().map(|d| d.join("reports"))),
+            };
+            if let Ok(mut d) = shared.report_dir.lock() {
+                *d = reports;
             }
             let start = match &selftest_dir {
                 Some(dir) => selftest::start(&handle, shared.clone(), dir.clone())?,

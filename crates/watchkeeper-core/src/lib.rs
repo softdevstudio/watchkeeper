@@ -24,6 +24,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use url::Url;
 
 pub mod history;
+pub mod report;
 
 const DETECT_TEMPLATE: &str = include_str!("../assets/detect.js");
 

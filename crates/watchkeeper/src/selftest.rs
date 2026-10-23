@@ -365,6 +365,9 @@ fn hostile_page(tracker: &str) -> String {
   }});
   fetch('/h-probe?found=' + found + '&drained=' + drained);
 
+  // Names built to break a saved report open.
+  try {{ localStorage.setItem('<img src=/h-xss onerror=alert(1)><scr' + 'ipt>alert(2)</scr' + 'ipt>', '1'); }} catch (e) {{ }}
+
   // Learn the frame key from a same-site frame's messages.
   var key = null;
   window.addEventListener('message', function (m) {{ try {{ if (m.data && m.data.wk) key = m.data.wk; }} catch (e) {{ }} }});
@@ -888,6 +891,16 @@ fn run_checks(
         },
     ));
 
+    // Save a report: the page may not, the panel may, and the report must
+    // hold every tracker address the servers saw (as the check above).
+    checks.push(check_report(
+        app,
+        shared,
+        tracker,
+        &seen,
+        "report saved from the panel only",
+    ));
+
     // Resize the window and check the layout follows.
     if let Some(w) = app.get_window(WINDOW) {
         let _ = w.set_size(LogicalSize::new(900.0, 600.0));
@@ -1005,6 +1018,15 @@ fn run_checks(
                 r.other_sites.len()
             )
         },
+    ));
+
+    let seen_now = seen_tracker_paths(&r, tracker);
+    checks.push(check_report(
+        app,
+        shared,
+        tracker,
+        &seen_now,
+        "hostile page's report stays inert",
     ));
 
     let dropped = r.dropped.saturating_sub(dropped_before);
@@ -1192,4 +1214,94 @@ fn check_history(app: &AppHandle, shared: &Shared) -> Vec<Check> {
         ),
     ));
     checks
+}
+
+/// Report files in the self-test's report folder.
+fn report_files(shared: &Shared) -> Vec<std::path::PathBuf> {
+    let Some(dir) = shared.report_dir.lock().ok().and_then(|d| d.clone()) else {
+        return Vec::new();
+    };
+    let mut v: Vec<std::path::PathBuf> = std::fs::read_dir(dir)
+        .map(|r| r.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+/// The page tries to save a report, which must change nothing; then the
+/// panel saves one. The JSON must list every tracker address in `seen`
+/// and parse; the HTML must be inert: no script or image elements, no
+/// links, and a policy that loads nothing.
+fn check_report(
+    app: &AppHandle,
+    shared: &Shared,
+    tracker: &Server,
+    seen: &[String],
+    name: &'static str,
+) -> Check {
+    let call = |label: &str| {
+        if let Some(v) = app.get_webview(label) {
+            let _ = v.eval(
+                "(function(){var i=window.__TAURI_INTERNALS__;if(i&&i.invoke)i.invoke('save_report').catch(function(){});})()",
+            );
+        }
+    };
+    let before = report_files(shared);
+    call(PAGE);
+    std::thread::sleep(Duration::from_millis(1500));
+    let after_page = report_files(shared);
+    call(crate::PANEL);
+    let made = wait_until(Instant::now() + Duration::from_secs(10), || {
+        report_files(shared).len() >= after_page.len() + 2
+    });
+    let new: Vec<std::path::PathBuf> = report_files(shared)
+        .into_iter()
+        .filter(|p| !after_page.contains(p))
+        .collect();
+    let json_path = new
+        .iter()
+        .find(|p| p.extension().is_some_and(|e| e == "json"));
+    let html_path = new
+        .iter()
+        .find(|p| p.extension().is_some_and(|e| e == "html"));
+    let json: Option<serde_json::Value> = json_path
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str(&t).ok());
+    let html = html_path
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .unwrap_or_default();
+    let host = format!("localhost:{}", tracker.port);
+    let listed: Vec<String> = json
+        .as_ref()
+        .and_then(|j| j["other_sites"].as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|o| o["addresses"].as_array().cloned().unwrap_or_default())
+        .filter_map(|a| a["address"].as_str().map(|s| s.to_string()))
+        .filter_map(|u| Url::parse(&u).ok())
+        .filter(|u| format!("{}:{}", u.host_str().unwrap_or(""), u.port().unwrap_or(0)) == host)
+        .map(|u| u.path().to_string())
+        .collect();
+    let missing: Vec<&String> = seen.iter().filter(|p| !listed.contains(p)).collect();
+    let lower = html.to_ascii_lowercase();
+    let inert = !html.is_empty()
+        && !lower.contains("<script")
+        && !lower.contains("<img")
+        && !lower.contains("href=")
+        && lower.contains("default-src 'none'");
+    let page_refused = after_page == before;
+    check(
+        name,
+        page_refused && made && json.is_some() && missing.is_empty() && inert,
+        format!(
+            "page's save refused: {page_refused}; panel saved {:?}; JSON parses: {}, lists {} of {} tracker addresses (missing {missing:?}); HTML {} bytes, inert: {inert}",
+            new.iter()
+                .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+                .collect::<Vec<_>>(),
+            json.is_some(),
+            seen.len() - missing.len(),
+            seen.len(),
+            html.len()
+        ),
+    )
 }
