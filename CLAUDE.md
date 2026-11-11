@@ -9,7 +9,7 @@ Language: Rust, Tauri 2
 Code license: Apache 2.0
 Contact: info@watchkeeper.net
 
-Family: Unweb (unweb.org, softdevstudio/unweb) took a one-time copy of this project's core crate as a starter (YK's decision, October 23, 2026); after that it is a separate, unrelated project and nothing is synced either way. Watchkeeper Plus is a later browser an AI assistant drives while you watch, on Chromium, reusing the detection script, profile handling and log format; its language is decided when it starts. Neither is started.
+Family: Unweb (unweb.org, softdevstudio/unweb) took a one-time copy of this project's core crate as a starter (YK's decision, October 23, 2026); it has its own repository and releases (0.4.0 on November 4, 2026), and nothing is synced either way. Watchkeeper Plus is a later browser an AI assistant drives while you watch, on Chromium, reusing the detection script, profile handling and log format; its language is decided when it starts. It is not started.
 
 ## Low maintenance workflow
 
@@ -122,6 +122,29 @@ October 23, 2026, after session 5, at YK's word ("the domain is connected. add c
 - examples/case-studies/server.py (Python, stdlib only) serves the made-up sites; README.md there gives the hosts line. The site's screenshots were taken from it.
 - softdevstudio.com lists Watchkeeper as the twenty-eighth project (data/studio.toml) with a note on 0.1.0 to 0.3.1; its CONTENT-PLAN.md has the brief, names, tag, footer, feeds row and session log row 2n.
 
+## Watchkeeper 0.4 (softdev-plan item 20, approved by YK 2026-11-11)
+
+What and why: the stated money path is reports for site owners and agencies, and they need to run Watchkeeper in CI, not click a panel; the panel names bare domains, which non-experts can't read; and requests made inside workers and service workers (and beacons sent while leaving a page) are the biggest stated blind spot, as trackers move there.
+
+Design decisions:
+- Phase A, report mode: `watchkeeper --report <url> [--out DIR] [--wait SECONDS] [--allow FILE]`. The window is built hidden, the page opens, and once it has finished loading Watchkeeper collects for `--wait` seconds (default 10, 1 to 300), drains once more, writes the same HTML and JSON report the panel saves (to `--out`, default the current folder) and exits. No history is read or written. It prints the two file paths. Exit codes: 0 report written, 2 bad arguments, 3 the page never loaded or no site was seen, 1 a file could not be written, 4 with `--allow`: the page contacted a site the allow file doesn't name (one site per line, `#` comments; the sites are printed on stderr). On Linux it still needs a display (`xvfb-run` in CI), which the README says.
+- Phase B, Watchkeeper's own tracker list (YK chose this on 2026-11-11 over AdGuard's CC BY-SA list, which is built from Ghostery's non-commercial WhoTracks.me data; DuckDuckGo Tracker Radar, Disconnect and Ghostery's trackerdb are all CC BY-NC-SA): crates/watchkeeper-core/assets/trackers.json, written for this project under Apache 2.0 from public facts (which company runs which domain, from the companies' own sites and documentation), format "watchkeeper-trackers" version 1, a list of services each with a name, the company, a category (advertising, analytics, social, session recording, tag manager, consent, customer data, performance, other) and its registrable sites. About 150 to 300 sites of the biggest tracker companies; anything not listed stays a bare site. The panel shows "Google Analytics (Google), analytics" beside a site; the report JSON gains name, company and category per site (additive, format_version stays 1); the HTML shows them. A unit test checks the file: valid sites (as the psl crate reduces them), no site listed twice, known categories.
+- Phase C, seen on the wire: the page webview is given a local SOCKS5 proxy of Watchkeeper's own (src/wire.rs, 127.0.0.1, random port, no sign-in, CONNECT only) that connects straight to where the engine asks and records each connection's host and port. That sees what the detection script can't: requests from dedicated, shared and service workers, beacons sent while a page closes, and anything else the engine sends for the page. A site seen only on the wire is listed separately ("Seen only on the wire") with its hosts and connection count, since it carries no address or frame and may include the engine's own requests (Edge's config service on Windows, for one). The proxy never changes what is sent; if Watchkeeper can't connect onward, the engine gets the failure it would have had. WebView2: --proxy-server and --proxy-bypass-list=<-loopback> with wry's default switches; WebKitGTK and WKWebView: WebviewBuilder::proxy_url (Tauri's macos-proxy, which needs macOS 14, so the minimum macOS rises from 10.15 to 14, and 0.3.1 stays for older Macs). Limits: 2,000 wire sites and 20 hosts each, counted past that. macOS sends loopback addresses past any proxy, so the self-test's wire checks use names from the hosts file (added by CI).
+- Self-test: report mode run as a child process on the hostile fixture page, its JSON matching the panel's saved report for that page (the done-when: same site, other sites, addresses, cookie and storage names, fingerprinting reads); `--allow` passing with the right list and exiting 4 with one site missing; tracker names in the panel and report for a fixture site the list names; a dedicated worker, a shared worker and a service worker each contacting a tracker site the page never touches, all three seen on the wire.
+- Upkeep: the Family paragraph (done with this plan).
+- Version 0.4.0.
+
+Steps:
+1. [x] Phase 0: this plan and the Family paragraph.
+2. [ ] Phase A: report mode, exit codes, --allow, tests.
+3. [ ] Phase B: trackers.json, lookups in core, panel and report, tests.
+4. [ ] Phase C: wire.rs, engine settings, wire sites in session, panel and report, tests.
+5. [ ] Self-test checks on Linux locally and on all three in CI; CI hosts entries.
+6. [ ] README, docs, Design here.
+7. [ ] Independent review (at most two rounds), fixes, fresh test/results.
+8. [ ] 0.4.0 released by the workflow; assets checked at the tag and latest; a downloaded build run.
+9. [ ] watchkeeper.net post with its own image and page updates; softdevstudio.com note and listing; softdev-plan item 20 done with a log row.
+
 ## Next
 
-Nothing approved beyond this. All five plan items are done. Waiting for YK.
+Watchkeeper 0.4 (softdev-plan item 20) is in progress; see its section above.
