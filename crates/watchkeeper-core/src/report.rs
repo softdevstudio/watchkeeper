@@ -40,6 +40,8 @@ pub struct OtherSite {
     pub site: String,
     /// The engine's own resource list showed this site being contacted.
     pub confirmed: bool,
+    /// Who runs the site, when Watchkeeper's list names it.
+    pub known: Option<crate::trackers::Known>,
     pub addresses: Vec<Address>,
 }
 
@@ -142,6 +144,7 @@ impl Report {
             .filter(|s| **s != r.site)
             .map(|site| OtherSite {
                 confirmed: r.confirmed_sites.contains(site),
+                known: crate::trackers::known(site),
                 addresses: by_site.remove(site).unwrap_or_default(),
                 site: site.clone(),
             })
@@ -280,8 +283,17 @@ impl Report {
         }
         for o in &self.other_sites {
             h.push_str(&format!(
-                "<details><summary><b>{}</b> <span class=\"muted\">{} address{}{}</span></summary>\n<ul>\n",
+                "<details><summary><b>{}</b>{} <span class=\"muted\">{} address{}{}</span></summary>\n<ul>\n",
                 esc(&o.site),
+                o.known
+                    .as_ref()
+                    .map(|k| format!(
+                        " {} ({}), {}",
+                        esc(&k.name),
+                        esc(&k.company),
+                        esc(&k.category)
+                    ))
+                    .unwrap_or_default(),
                 o.addresses.len(),
                 if o.addresses.len() == 1 { "" } else { "es" },
                 if o.confirmed {

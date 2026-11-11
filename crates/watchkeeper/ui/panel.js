@@ -26,7 +26,10 @@
     set('site', s.site || 'No page yet');
     document.getElementById('hint').hidden = !!s.site;
     set('sites', s.third_party_sites.length);
-    list('site-list', s.third_party_sites);
+    list('site-list', s.third_party_sites.map(function (name) {
+      var k = s.known_sites && s.known_sites[name];
+      return k ? name + ': ' + k.name + ' (' + k.company + '), ' + k.category : name;
+    }));
     set('addresses', s.addresses);
     set('third-addresses', s.third_party_addresses);
     set('first-cookies', s.first_party_cookies);

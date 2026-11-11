@@ -13,6 +13,7 @@ mod history;
 #[cfg(target_os = "linux")]
 mod linux_layout;
 mod recorder;
+mod report_mode;
 mod selftest;
 
 use std::sync::{Arc, Mutex};
@@ -54,6 +55,10 @@ pub struct Shared {
     /// Where saved reports go: the Downloads folder, or the self-test's
     /// own folder in a self-test.
     pub report_dir: Mutex<Option<std::path::PathBuf>>,
+    /// When the page last finished loading (report mode waits for it).
+    pub loaded_at: Mutex<Option<std::time::Instant>>,
+    /// Collections done so far (report mode waits for one more).
+    pub drains: std::sync::atomic::AtomicU64,
 }
 
 /// Where a report was saved, for the panel.
@@ -391,6 +396,9 @@ fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
                     if let Ok(mut session) = target.session.lock() {
                         let _ = session.apply(&json);
                     }
+                    target
+                        .drains
+                        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 });
             tick += 1;
             shared.record();
@@ -418,12 +426,18 @@ fn spawn_collector(app: AppHandle, shared: Arc<Shared>) {
     });
 }
 
-fn build_window(app: &AppHandle, shared: Arc<Shared>, start: Url) -> tauri::Result<()> {
+fn build_window(
+    app: &AppHandle,
+    shared: Arc<Shared>,
+    start: Url,
+    visible: bool,
+) -> tauri::Result<()> {
     let (w, h) = (1200.0, 800.0);
     let window = WindowBuilder::new(app, WINDOW)
         .title("Watchkeeper")
         .inner_size(w, h)
         .min_inner_size(640.0, 400.0)
+        .visible(visible)
         .build()?;
 
     let script = detection_script(&shared.keys);
@@ -451,6 +465,11 @@ fn build_window(app: &AppHandle, shared: Arc<Shared>, start: Url) -> tauri::Resu
             {
                 if let Ok(mut a) = on_load.address.lock() {
                     *a = payload.url().to_string();
+                }
+            }
+            if payload.event() == PageLoadEvent::Finished {
+                if let Ok(mut l) = on_load.loaded_at.lock() {
+                    *l = Some(std::time::Instant::now());
                 }
             }
         })
@@ -496,6 +515,16 @@ fn build_window(app: &AppHandle, shared: Arc<Shared>, start: Url) -> tauri::Resu
 }
 
 fn main() {
+    // Report mode: checked before anything starts, so a bad argument is
+    // an exit code, not a window.
+    let report_args = match report_mode::Args::from_env() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("watchkeeper: {e}");
+            eprintln!("{}", report_mode::USAGE);
+            std::process::exit(report_mode::EXIT_USAGE);
+        }
+    };
     let selftest_dir = selftest::requested_dir();
     let keys = Keys::new(&random_hex(), &random_hex(), &random_hex()).expect("random keys are hex");
     let shared = Arc::new(Shared {
@@ -505,6 +534,8 @@ fn main() {
         recorder: Mutex::new(recorder::Recorder::new(None)),
         saving: Mutex::new(()),
         report_dir: Mutex::new(None),
+        loaded_at: Mutex::new(None),
+        drains: std::sync::atomic::AtomicU64::new(0),
     });
 
     let state = shared.clone();
@@ -525,6 +556,8 @@ fn main() {
             let handle = app.handle().clone();
             // The self-test keeps its history in its own folder.
             let path = match &selftest_dir {
+                // Report mode keeps no history.
+                _ if report_args.is_some() => None,
                 Some(dir) => {
                     // Each run starts with no history.
                     let p = dir.join("history.json");
@@ -538,9 +571,10 @@ fn main() {
             }
             // Reports go to Downloads, or the app's data folder when there
             // is none; the self-test keeps them in its own folder.
-            let reports = match &selftest_dir {
-                Some(dir) => Some(dir.join("reports")),
-                None => handle
+            let reports = match (&report_args, &selftest_dir) {
+                (Some(a), _) => Some(a.out.clone()),
+                (None, Some(dir)) => Some(dir.join("reports")),
+                (None, None) => handle
                     .path()
                     .download_dir()
                     .ok()
@@ -549,12 +583,16 @@ fn main() {
             if let Ok(mut d) = shared.report_dir.lock() {
                 *d = reports;
             }
-            let start = match &selftest_dir {
-                Some(dir) => selftest::start(&handle, shared.clone(), dir.clone())?,
-                None => start_url_from_args(),
+            let start = match (&report_args, &selftest_dir) {
+                (Some(a), _) => a.url.clone(),
+                (None, Some(dir)) => selftest::start(&handle, shared.clone(), dir.clone())?,
+                (None, None) => start_url_from_args(),
             };
-            build_window(&handle, shared.clone(), start)?;
-            spawn_collector(handle, shared.clone());
+            build_window(&handle, shared.clone(), start, report_args.is_none())?;
+            spawn_collector(handle.clone(), shared.clone());
+            if let Some(a) = report_args.clone() {
+                report_mode::run(handle, shared.clone(), a);
+            }
             Ok(())
         })
         .build(tauri::generate_context!());

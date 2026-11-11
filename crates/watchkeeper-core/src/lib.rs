@@ -25,6 +25,7 @@ use url::Url;
 
 pub mod history;
 pub mod report;
+pub mod trackers;
 
 const DETECT_TEMPLATE: &str = include_str!("../assets/detect.js");
 
@@ -259,6 +260,8 @@ pub struct Summary {
     pub page_url: String,
     /// Other sites the page contacted.
     pub third_party_sites: Vec<String>,
+    /// Who runs those sites, for the ones Watchkeeper's list names.
+    pub known_sites: std::collections::BTreeMap<String, trackers::Known>,
     /// Distinct addresses requested, and how many on other sites.
     pub addresses: usize,
     pub third_party_addresses: usize,
@@ -467,6 +470,11 @@ impl SiteReport {
             site: self.site.clone(),
             page_url: self.page_url.clone(),
             third_party_sites: self.other_sites.iter().cloned().collect(),
+            known_sites: self
+                .other_sites
+                .iter()
+                .filter_map(|s| trackers::known(s).map(|k| (s.clone(), k)))
+                .collect(),
             addresses: self.requests.len(),
             third_party_addresses,
             first_party_cookies,
